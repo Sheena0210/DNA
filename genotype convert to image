@@ -1,0 +1,9590 @@
+#--------------------------genotyoe 轉 image-------------------------------#
+#先利用Chr1 / Segment1 / Block1（206 SNP）嘗試找出haplotype的頻率
+#因為避免計算太多因此建立規則是
+#只要某個partial haplotype已經沒有至少2個人 就立刻停止那條branch
+#所以最後只留下150人中至少2人共同haplotype，再算haplotype出現的頻率： 人數 / 150
+
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+
+# ------------------------------------------------------------
+# Step 1：讀取R輸出的150人 nucleotide genotype
+# ------------------------------------------------------------
+
+file_path = Path.home() / "Desktop" / "segment_haplotype_step2" / \
+    "Chr1_Segment1_Block1_nucleotide_genotype_150.csv"
+
+
+geno_df = pd.read_csv(
+    file_path,
+    index_col=0
+)
+
+
+print("Number of subjects =", geno_df.shape[0])
+print("Number of SNPs =", geno_df.shape[1])
+
+print(geno_df.iloc[:5, :10])
+
+##step2 把 nucleotide genotype 轉成{}的形式
+
+ALLELES = ("A", "C", "G", "T")
+
+
+def genotype_to_alleles(genotype):
+ 
+    if pd.isna(genotype):
+        return set()
+
+    genotype = str(genotype)
+
+    if genotype == "NoCall":
+        return set()
+
+    parts = genotype.split("/")
+
+    if len(parts) != 2:
+        return set()
+
+    return set(parts)
+
+
+#測試
+print(genotype_to_alleles("A/A"))
+print(genotype_to_alleles("A/G"))
+print(genotype_to_alleles("C/T"))
+print(genotype_to_alleles("NoCall"))
+
+#step3 建立每個 SNP × 每個 allele 的 supporter matrix
+
+#
+# 某一顆SNP：
+#
+# Person1 = A/A
+# Person2 = A/G
+# Person3 = G/G
+#
+# 那麼：
+#
+# allele A 的support：
+# Person1 = True
+# Person2 = True
+# Person3 = False
+#
+# allele G 的support：
+# Person1 = False
+# Person2 = True
+# Person3 = True
+#
+# 之後我們建立完整haplotype時，
+# 就可以一路把不同SNP的support取交集，
+# 找出「哪些人同時支持整條haplotype
+
+#150人的數量
+n_subjects = geno_df.shape[0]
+
+#目前block中的SNP數
+#這個測試Block應該是206
+n_snps = geno_df.shape[1]
+
+#geno_df的row index就是150人的sample ID
+#轉成numpy array方便之後根據True/False抓sample
+sample_ids = geno_df.index.to_numpy()
+
+#geno_df的column名稱就是variant ID
+#例如AX-xxxx
+snp_ids = geno_df.columns.to_numpy()
+
+
+#最後的結構會像：
+#
+# support_masks[0]["A"]
+# support_masks[0]["C"]
+# support_masks[0]["G"]
+# support_masks[0]["T"]
+#
+#代表第1顆SNP：
+#哪些subjects可以支持A/C/G/T
+#
+#每個結果都是長度150的True/False vector
+# ------------------------------------------------------------
+
+support_masks = []
+
+
+# ------------------------------------------------------------
+# 5. 逐顆SNP處理
+# ------------------------------------------------------------
+
+for j in range(n_snps):
+
+    #抓目前第j顆SNP
+    #150人的nucleotide genotype
+    #
+    #例如：
+    #A/A
+    #A/G
+    #G/G
+    #...
+    genotypes = geno_df.iloc[:, j]
+
+
+    # --------------------------------------------------------
+    # 6. 把每個人的genotype轉成允許的allele集合
+    # --------------------------------------------------------
+    #
+    #例如：
+    #
+    #A/A -> {"A"}
+    #A/G -> {"A","G"}
+    #G/G -> {"G"}
+    #
+    #這裡使用前面建立的genotype_to_alleles()
+    # --------------------------------------------------------
+
+    allele_sets = [
+        genotype_to_alleles(g)
+        for g in genotypes
+    ]
+
+
+    # --------------------------------------------------------
+    # 7. 建立這一顆SNP的support dictionary
+    # --------------------------------------------------------
+
+    snp_support = {}
+
+
+    # --------------------------------------------------------
+    # 8. 分別檢查A/C/G/T
+    # --------------------------------------------------------
+
+    for allele in ALLELES:
+
+        #對150人逐一判斷：
+        #
+        #目前這個allele
+        #是否存在於該subject允許的allele集合中
+        #
+        #例如：
+        #
+        #allele = "A"
+        #
+        #Person1 = A/A -> True
+        #Person2 = A/G -> True
+        #Person3 = G/G -> False
+
+        snp_support[allele] = np.array(
+            [
+                allele in allele_set
+                for allele_set in allele_sets
+            ],
+            dtype=bool
+        )
+
+
+    # --------------------------------------------------------
+    # 9. 把目前這顆SNP的support結果存進list
+    # --------------------------------------------------------
+
+    support_masks.append(
+        snp_support
+    )
+
+
+# ------------------------------------------------------------
+# 10. 確認support mask建立完成
+# ------------------------------------------------------------
+
+print(
+    "Support masks created."
+)
+
+print(
+    "Number of SNPs in support_masks =",
+    len(support_masks)
+)
+
+print(
+    "Number of subjects =",
+    n_subjects
+)
+# ============================================================
+# QC：查看第1顆SNP有多少人支持A/C/G/T
+# ============================================================
+
+print(
+    "First SNP ID =",
+    snp_ids[0]
+)
+
+for allele in ALLELES:
+
+    #True加總後就是支持這個allele的人數
+    support_n = support_masks[0][allele].sum()
+
+    print(
+        allele,
+        "support subjects =",
+        support_n
+    )
+#每往下一顆 SNP，就把目前仍支持這條haplotype 的和支持下一個 allele 的人取交集
+#如果最後只剩 0 或 1 個人，就直接停止這條 branch，不再往後搜尋
+
+# ============================================================
+# Step 4：搜尋至少2人共同支持的完整candidate haplotypes
+# ============================================================
+#
+# 目前：
+#
+# n_subjects = 150
+# n_snps = 206
+#
+# support_masks[j][allele]
+# 已經告訴我們：
+#
+# 第j顆SNP中，
+# 哪些subjects的genotype允許allele A/C/G/T
+#
+#
+# 現在要做的是：
+#
+# SNP1選一個allele
+# ↓
+# 找哪些人支持
+# ↓
+# SNP2再選一個allele
+# ↓
+# 與前面的subjects取交集
+# ↓
+# SNP3...
+# ↓
+# 一直做到SNP206
+#
+# 最後得到：
+#
+# 完整haplotype
+# +
+# 有多少subjects的genotype可以共同支持它
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 設定minimum support
+# ------------------------------------------------------------
+#
+# 我們現在的目標是找：
+# 「至少有2個人共同支持」的candidate haplotype
+#
+# 所以設定：
+# min_support = 2
+#
+# 如果某個partial haplotype只剩1人支持，
+# 就不需要再往後延伸
+# ------------------------------------------------------------
+
+min_support = 2
+
+
+# ------------------------------------------------------------
+# 2. 設定安全上限
+# ------------------------------------------------------------
+#
+# 理論空間是2^206，非常巨大。
+#
+# 雖然我們會prune，
+# 但為了避免某些資料真的產生大量branches，
+# 先設定最大搜尋node數。
+#
+# 一個node可以理解成：
+# 「目前已經形成到某一顆SNP的partial haplotype」
+# ------------------------------------------------------------
+
+max_nodes = 5_000_000
+
+
+# ------------------------------------------------------------
+# 3. 設定最多儲存多少條完整candidate haplotypes
+# ------------------------------------------------------------
+#
+# 如果真的有非常大量完整candidate haplotypes，
+# 不希望一次把記憶體塞滿。
+#
+# 先設定最多存100,000條。
+# ------------------------------------------------------------
+
+max_results = 100_000
+
+
+# ------------------------------------------------------------
+# 4. 建立搜尋stack
+# ------------------------------------------------------------
+#
+# stack中的每一筆資料包含3個東西：
+#
+# 1. snp_index
+#    下一步要處理第幾顆SNP
+#
+# 2. haplotype_prefix
+#    目前已經形成的haplotype sequence
+#
+# 3. supporter mask
+#    目前仍然支持這條haplotype的subjects
+#
+#
+# 一開始：
+#
+# 還沒有選任何SNP
+# 所以：
+#
+# snp_index = 0
+# haplotype_prefix = ""
+#
+# 並且150人全部都是potential supporters
+# ------------------------------------------------------------
+
+stack = [
+    (
+        0,                                  #從第1顆SNP開始
+        "",                                 #目前haplotype還是空的
+        np.ones(n_subjects, dtype=bool)     #150人全部先設為True
+    )
+]
+
+
+# ------------------------------------------------------------
+# 5. 建立results
+# ------------------------------------------------------------
+#
+# 最後完整走完206顆SNP的candidate haplotypes
+# 會放進這個list
+# ------------------------------------------------------------
+
+results = []
+
+
+# ------------------------------------------------------------
+# 6. 記錄總共搜尋過多少nodes
+# ------------------------------------------------------------
+
+nodes_visited = 0
+
+# ============================================================
+# 7. 開始pruning search
+# ============================================================
+
+while stack:
+
+    # --------------------------------------------------------
+    # 從stack取出目前要處理的一條partial haplotype
+    # --------------------------------------------------------
+    #
+    # stack.pop()會取出最後加入的一筆
+    #
+    # 得到：
+    #
+    # snp_index
+    # = 下一顆要處理的SNP位置
+    #
+    # prefix
+    # = 目前已經形成的haplotype sequence
+    #
+    # current_support
+    # = 目前仍支持這條sequence的subjects
+    # --------------------------------------------------------
+
+    snp_index, prefix, current_support = stack.pop()
+
+
+    #每取出一個node就記錄一次
+    nodes_visited += 1
+
+
+    # --------------------------------------------------------
+    # 8. 安全檢查：搜尋node太多時停止
+    # --------------------------------------------------------
+
+    if nodes_visited > max_nodes:
+
+        print(
+            "STOP: maximum search nodes reached =",
+            max_nodes
+        )
+
+        break
+
+
+    # --------------------------------------------------------
+    # 9. 判斷是否已經走完整個Block
+    # --------------------------------------------------------
+    #
+    # 如果：
+    #
+    # snp_index == n_snps
+    #
+    # 代表206顆SNP全部都已經選完allele。
+    #
+    # 此時prefix就是一條完整candidate haplotype。
+    # --------------------------------------------------------
+
+    if snp_index == n_snps:
+
+        #計算目前仍有多少subjects支持這條完整haplotype
+        support_n = int(
+            current_support.sum()
+        )
+
+
+        #把完整candidate haplotype存起來
+        results.append(
+            {
+
+                #完整206-SNP allele sequence
+                "haplotype": prefix,
+
+                #有多少subjects可以支持這條candidate haplotype
+                "support_n": support_n,
+
+                #以150人為denominator
+                "frequency_150":
+                    support_n / n_subjects,
+
+                #記錄實際有哪些subjects支持
+                "support_samples":
+                    ",".join(
+                        sample_ids[current_support]
+                    )
+            }
+        )
+
+
+        # ----------------------------------------------------
+        # 如果完整candidate haplotype太多
+        # 達到我們設定的安全上限，就停止
+        # ----------------------------------------------------
+
+        if len(results) >= max_results:
+
+            print(
+                "STOP: maximum result number reached =",
+                max_results
+            )
+
+            break
+
+
+        #這條完整haplotype已經處理完成
+        #回到while stack處理下一條branch
+        continue
+
+
+    # --------------------------------------------------------
+    # 10. 處理目前這一顆SNP
+    # --------------------------------------------------------
+    #
+    # 嘗試A / C / G / T四種allele
+    #
+    # 但如果某個allele在這顆SNP根本沒有人支持，
+    # 後面自然會直接被prune掉
+    # --------------------------------------------------------
+
+    for allele in ALLELES:
+
+
+        # ----------------------------------------------------
+        # 11. 取得目前SNP中
+        # 支持這個allele的150人True/False vector
+        # ----------------------------------------------------
+
+        allele_support = support_masks[
+            snp_index
+        ][
+            allele
+        ]
+
+
+        # ----------------------------------------------------
+        # 12. 取交集
+        # ----------------------------------------------------
+        #
+        # current_support：
+        # 支持目前prefix的人
+        #
+        # allele_support：
+        # 支持目前這顆SNP allele的人
+        #
+        #
+        # & 的意思就是：
+        #
+        # 必須「兩個條件都True」
+        #
+        # 才能繼續支持新的haplotype
+        #
+        # 例如：
+        #
+        # prefix = A-C
+        # 現在加入G
+        #
+        # 那new_support就代表：
+        # 同時支持A-C-G的人
+        # ----------------------------------------------------
+
+        new_support = (
+            current_support
+            &
+            allele_support
+        )
+
+
+        # ----------------------------------------------------
+        # 13. 計算加入目前allele後
+        # 還剩多少subjects支持
+        # ----------------------------------------------------
+
+        support_n = int(
+            new_support.sum()
+        )
+
+
+        # ----------------------------------------------------
+        # 14. Pruning核心
+        # ----------------------------------------------------
+        #
+        # 如果support_n < 2：
+        #
+        # 代表這條partial haplotype
+        # 已經沒有至少2個人共同支持。
+        #
+        # 即使後面再加更多SNP，
+        # supporter只可能更少，不可能增加。
+        #
+        # 所以可以直接停止這條branch。
+        # ----------------------------------------------------
+
+        if support_n < min_support:
+
+            continue
+
+
+        # ----------------------------------------------------
+        # 15. 如果還有至少2個subjects
+        # 就繼續往下一顆SNP搜尋
+        # ----------------------------------------------------
+        #
+        # prefix + allele
+        #
+        # 例如：
+        #
+        # prefix = "AC"
+        # allele = "G"
+        #
+        # 新prefix = "ACG"
+        #
+        # 並且把new_support一起保存，
+        # 下一顆SNP只能從這些仍支持ACG的人繼續找。
+        # ----------------------------------------------------
+
+        stack.append(
+            (
+                snp_index + 1,
+                prefix + allele,
+                new_support
+            )
+        )
+
+# ============================================================
+# Step 5：優先搜尋support人數最高的candidate haplotypes
+# ============================================================
+#
+# 剛剛的DFS會一直搜尋所有可能branch，
+# 結果超過100,000條後被停止。
+#
+# 現在改成Best-first search：
+#
+# 每次優先處理「目前support subjects最多」的partial haplotype。
+#
+# 例如：
+#
+# partial haplotype A-C
+# → 80人support
+#
+# partial haplotype G-T
+# → 20人support
+#
+# 那我們會先延伸A-C，
+# 因為它比較有可能最後形成high-frequency haplotype。
+#
+# 目的：
+# 不需要找完全部candidate haplotypes，
+# 先找最常見的完整haplotypes。
+# ============================================================
+
+
+#Python priority queue
+import heapq
+
+
+# ------------------------------------------------------------
+# 1. 設定我們想先找多少條最高頻完整haplotypes
+# ------------------------------------------------------------
+#
+#目前先找前100條
+#不是說只有100條，
+#只是先看最高frequency的結果
+# ------------------------------------------------------------
+
+top_n_haplotypes = 100
+
+
+# ------------------------------------------------------------
+# 2. 最低共同support仍然設定為2人
+# ------------------------------------------------------------
+
+min_support = 2
+
+
+# ------------------------------------------------------------
+# 3. 建立priority queue
+# ------------------------------------------------------------
+#
+# heapq預設是「數字小的優先」
+#
+# 但我們希望：
+# support人數越多越優先
+#
+# 所以使用負號：
+#
+# 150人support
+# → priority = -150
+#
+# 100人support
+# → priority = -100
+#
+# -150比-100小，
+# 因此150人的branch會先被取出
+#
+#
+# queue每一筆包含：
+#
+# (
+#   -support_n,
+#   unique_counter,
+#   snp_index,
+#   haplotype_prefix,
+#   supporter_mask
+# )
+#
+# unique_counter只是避免兩筆priority相同時
+# Python嘗試比較numpy array而發生error
+# ------------------------------------------------------------
+
+priority_queue = []
+
+
+#用來產生唯一編號
+counter = 0
+
+
+#一開始還沒有選任何allele
+#所以150人全部都是potential supporters
+initial_support = np.ones(
+    n_subjects,
+    dtype=bool
+)
+
+
+#把搜尋起點放進priority queue
+heapq.heappush(
+    priority_queue,
+    (
+        -n_subjects,        #150人support，所以priority=-150
+        counter,            #唯一編號
+        0,                  #從第1顆SNP開始
+        "",                 #目前haplotype是空的
+        initial_support     #目前150人都還support
+    )
+)
+
+
+# ------------------------------------------------------------
+# 4. 儲存最後找到的完整high-frequency haplotypes
+# ------------------------------------------------------------
+
+top_results = []
+
+
+#記錄總共搜尋多少nodes
+nodes_visited_best = 0
+
+# ============================================================
+# 5. 開始Best-first search
+# ============================================================
+
+while priority_queue and len(top_results) < top_n_haplotypes:
+
+    # --------------------------------------------------------
+    # 取出目前support subjects最多的branch
+    # --------------------------------------------------------
+
+    (
+        negative_support_n,
+        _,
+        snp_index,
+        prefix,
+        current_support
+    ) = heapq.heappop(
+        priority_queue
+    )
+
+
+    #把負數轉回真正support人數
+    current_support_n = -negative_support_n
+
+
+    #記錄搜尋node數
+    nodes_visited_best += 1
+
+
+    # --------------------------------------------------------
+    # 如果206顆SNP全部完成
+    # 代表找到一條完整candidate haplotype
+    # --------------------------------------------------------
+
+    if snp_index == n_snps:
+
+        top_results.append(
+            {
+                #完整206-SNP haplotype
+                "haplotype": prefix,
+
+                #有多少subjects的genotype可以支持
+                "support_n": current_support_n,
+
+                #以150人為denominator的frequency
+                "frequency_150":
+                    current_support_n / n_subjects,
+
+                #列出support這條haplotype的samples
+                "support_samples":
+                    ",".join(
+                        sample_ids[current_support]
+                    )
+            }
+        )
+
+        #這條已經完成
+        #回去處理priority queue下一條
+        continue
+
+
+    # --------------------------------------------------------
+    # 尚未走完206顆SNP
+    # 嘗試目前SNP的A/C/G/T
+    # --------------------------------------------------------
+
+    for allele in ALLELES:
+
+        #目前這顆SNP中
+        #哪些subjects可以支持這個allele
+        allele_support = support_masks[
+            snp_index
+        ][
+            allele
+        ]
+
+
+        #必須同時支持：
+        #
+        #目前已經形成的prefix
+        #AND
+        #目前這顆SNP的allele
+        new_support = (
+            current_support
+            &
+            allele_support
+        )
+
+
+        #加入這個allele後
+        #還剩多少subjects共同support
+        new_support_n = int(
+            new_support.sum()
+        )
+
+
+        # ----------------------------------------------------
+        # 如果只剩0或1人
+        #就不是我們現在要找的「共同haplotype」
+        #直接prune
+        # ----------------------------------------------------
+
+        if new_support_n < min_support:
+            continue
+
+
+        #新的haplotype prefix
+        new_prefix = prefix + allele
+
+
+        #unique counter +1
+        counter += 1
+
+
+        # ----------------------------------------------------
+        # 把新的branch放進priority queue
+        #
+        #support人數越多，
+        #negative number越小，
+        #因此越快被取出處理
+        # ----------------------------------------------------
+
+        heapq.heappush(
+            priority_queue,
+            (
+                -new_support_n,
+                counter,
+                snp_index + 1,
+                new_prefix,
+                new_support
+            )
+        )
+
+# ============================================================
+# Step 5 QC
+# ============================================================
+
+print(
+    "Nodes visited =",
+    nodes_visited_best
+)
+
+print(
+    "Complete high-frequency haplotypes found =",
+    len(top_results)
+)
+
+
+#如果有找到完整haplotypes
+if len(top_results) > 0:
+
+    print(
+        "Highest support_n =",
+        top_results[0]["support_n"]
+    )
+
+    print(
+        "Highest frequency =",
+        top_results[0]["frequency_150"]
+    )
+
+#e.g.,先用Chr1、Segment 1、Block 1 不設定任何停止 就計算出所有組合
+# ============================================================
+# Chr1 / Segment1 / Block1
+# Genotype-compatible candidate haplotype frequency
+#
+# 資料：
+# 150 subjects
+# 206 SNPs
+#
+# 目的：
+#
+# 1. 使用每個人的 nucleotide genotype
+# 2. 每顆SNP選擇一個allele形成haplotype
+# 3. 找出150人中至少2人可以共同支持的完整haplotypes
+# 4. 計算每種support_n對應的frequency
+#
+# 注意：
+# 目前沒有做phasing。
+# 因此這裡得到的是：
+#
+# genotype-compatible candidate haplotype
+#
+# 而不是已確認存在於同一條chromosome上的phased haplotype。
+# ============================================================
+
+
+# ============================================================
+# Step 1：載入套件
+# ============================================================
+
+import pandas as pd
+import numpy as np
+
+from pathlib import Path
+from collections import defaultdict, Counter
+# ============================================================
+# Step 2：讀取Chr1 / Segment1 / Block1資料
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 指定檔案位置
+# ------------------------------------------------------------
+#
+# 這是前面由R輸出的：
+#
+# 150人 × 206 SNP nucleotide genotype matrix
+#
+# row：
+# subject
+#
+# column：
+# SNP
+#
+# cell：
+# A/A、A/G、C/T、G/G、NoCall...
+# ------------------------------------------------------------
+
+file_path = (
+    Path.home()
+    / "Desktop"
+    / "segment_haplotype_step2"
+    / "Chr1_Segment1_Block1_nucleotide_genotype_150.csv"
+)
+
+
+# ------------------------------------------------------------
+# 2. 讀入CSV
+# ------------------------------------------------------------
+#
+# index_col=0：
+# 第一欄是R存下來的sample ID
+# 把它直接當成DataFrame row name
+# ------------------------------------------------------------
+
+geno_df = pd.read_csv(
+    file_path,
+    index_col=0
+)
+
+
+# ------------------------------------------------------------
+# 3. 確認dimension
+# ------------------------------------------------------------
+
+print(
+    "Number of subjects =",
+    geno_df.shape[0]
+)
+
+print(
+    "Number of SNPs =",
+    geno_df.shape[1]
+)
+
+
+# ------------------------------------------------------------
+# 4. 查看前5人、前10顆SNP
+# ------------------------------------------------------------
+
+print(
+    geno_df.iloc[
+        :5,
+        :10
+    ]
+)
+
+# ============================================================
+# Step 3：標準化nucleotide genotype
+# ============================================================
+#
+# 目的：
+#
+# 確保CSV中的genotype都是一致格式。
+#
+# 例如：
+#
+# A/A
+# A/G
+# C/T
+# G/G
+# NoCall
+#
+# 避免因為空格、大小寫等問題造成後面判斷錯誤。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 把所有不是missing的值轉成字串
+# ------------------------------------------------------------
+
+geno_df = geno_df.apply(
+    lambda col:
+        col.map(
+            lambda x:
+                str(x).strip().upper()
+                if pd.notna(x)
+                else "NOCALL"
+        )
+)
+
+
+# ------------------------------------------------------------
+# 2. 統一NoCall名稱
+# ------------------------------------------------------------
+#
+# R中我們存的是：
+# NoCall
+#
+# Python轉大寫後會變：
+# NOCALL
+#
+# 後面全部統一使用：
+# NOCALL
+# ------------------------------------------------------------
+
+geno_df = geno_df.replace(
+    {
+        "NO CALL": "NOCALL",
+        "NA": "NOCALL",
+        "NAN": "NOCALL",
+        "": "NOCALL"
+    }
+)
+
+
+# ------------------------------------------------------------
+# 3. 定義合法的DNA alleles
+# ------------------------------------------------------------
+
+ALLELES = (
+    "A",
+    "C",
+    "G",
+    "T"
+)
+
+
+# ------------------------------------------------------------
+# 4. 建立function：
+# nucleotide genotype -> 該subject允許的alleles
+# ------------------------------------------------------------
+#
+# 例如：
+#
+# A/A
+# -> {"A"}
+#
+# A/G
+# -> {"A","G"}
+#
+# C/T
+# -> {"C","T"}
+#
+# G/G
+# -> {"G"}
+#
+#
+# NOCALL：
+#
+# 目前採取保守作法：
+# 不把它當作任何allele的positive evidence。
+#
+# 所以：
+#
+# NOCALL -> empty set
+#
+# 代表這個subject遇到這顆missing SNP時，
+# 不會被計入完整candidate haplotype的support。
+# ------------------------------------------------------------
+
+def genotype_to_alleles(genotype):
+
+    #missing / NoCall
+    if genotype == "NOCALL":
+        return set()
+
+
+    #例如A/G
+    parts = genotype.split("/")
+
+
+    #正常diploid genotype應該有兩個alleles
+    if len(parts) != 2:
+        return set()
+
+
+    #只接受A/C/G/T
+    if (
+        parts[0] not in ALLELES
+        or
+        parts[1] not in ALLELES
+    ):
+        return set()
+
+
+    #使用set：
+    #
+    # A/A -> {"A"}
+    #
+    # A/G -> {"A","G"}
+    return set(parts)
+# ============================================================
+# Step 4：建立每顆SNP × allele的supporter bitmask
+# ============================================================
+#
+# 目的：
+#
+# 對206顆SNP中的每一顆，
+# 建立：
+#
+# allele A -> 哪些subjects可以支持
+# allele C -> 哪些subjects可以支持
+# allele G -> 哪些subjects可以支持
+# allele T -> 哪些subjects可以支持
+#
+#
+# 例如某顆SNP：
+#
+# Person1 = A/A
+# Person2 = A/G
+# Person3 = G/G
+#
+# 那：
+#
+# A supporter：
+# Person1、Person2
+#
+# G supporter：
+# Person2、Person3
+#
+#
+# 為了讓後面的交集計算更快，
+# 我們把150人的True/False vector
+# 壓縮成Python integer bitmask。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 基本資料大小
+# ------------------------------------------------------------
+
+n_subjects = geno_df.shape[0]
+
+n_snps = geno_df.shape[1]
+
+
+# ------------------------------------------------------------
+# 2. 保存sample ID與SNP ID
+# ------------------------------------------------------------
+
+sample_ids = geno_df.index.to_numpy()
+
+snp_ids = geno_df.columns.to_numpy()
+
+
+# ------------------------------------------------------------
+# 3. 建立allele_options
+# ------------------------------------------------------------
+#
+# allele_options[j]
+#
+# 代表第j顆SNP可以使用哪些alleles，
+# 以及每個allele有哪些subjects支持。
+#
+#
+# 結構例如：
+#
+# allele_options[0] =
+#
+# [
+#   ("A", supporter_bitmask),
+#   ("G", supporter_bitmask)
+# ]
+#
+#
+# 因為你的資料已經限制為biallelic SNP，
+# 所以正常來說每顆SNP主要只有兩個alleles。
+# ------------------------------------------------------------
+
+allele_options = []
+
+
+# ------------------------------------------------------------
+# 4. 逐顆SNP處理
+# ------------------------------------------------------------
+
+for j in range(n_snps):
+
+    #目前這顆SNP的150人genotype
+    genotypes = geno_df.iloc[:, j]
+
+
+    #這顆SNP所有可能的allele options
+    options_now = []
+
+
+    # --------------------------------------------------------
+    # 分別檢查A/C/G/T
+    # --------------------------------------------------------
+
+    for allele in ALLELES:
+
+        #supporter bitmask
+        #
+        #一開始全部bit都是0
+        supporter_mask = 0
+
+
+        # ----------------------------------------------------
+        # 逐一檢查150人
+        # ----------------------------------------------------
+
+        for i, genotype in enumerate(genotypes):
+
+            #把genotype轉成允許的alleles
+            allowed_alleles = (
+                genotype_to_alleles(
+                    genotype
+                )
+            )
+
+
+            #如果這個subject可以支持目前allele
+            if allele in allowed_alleles:
+
+                #把第i個bit設成1
+                supporter_mask |= (
+                    1 << i
+                )
+
+
+        # ----------------------------------------------------
+        # 計算有多少subjects支持這個allele
+        # ----------------------------------------------------
+
+        support_n = (
+            supporter_mask.bit_count()
+        )
+
+
+        # ----------------------------------------------------
+        # 如果連2個人都沒有，
+        # 這個allele不可能形成
+        # support_n >= 2的完整haplotype。
+        #
+        # 所以可以直接不加入搜尋。
+        # ----------------------------------------------------
+
+        if support_n >= 2:
+
+            options_now.append(
+                (
+                    allele,
+                    supporter_mask
+                )
+            )
+
+
+    # --------------------------------------------------------
+    # 保存目前這顆SNP
+    # --------------------------------------------------------
+
+    allele_options.append(
+        options_now
+    )
+
+# ============================================================
+# Step 4 QC：確認allele_options不是空的
+# ============================================================
+
+
+print(
+    "Number of SNPs in allele_options =",
+    len(allele_options)
+)
+
+
+# ------------------------------------------------------------
+# 查看前10顆SNP
+# ------------------------------------------------------------
+
+for j in range(
+    min(
+        10,
+        n_snps
+    )
+):
+
+    print(
+        "SNP",
+        j + 1,
+        snp_ids[j]
+    )
+
+
+    for (
+        allele,
+        supporter_mask
+    ) in allele_options[j]:
+
+        print(
+            "   ",
+            allele,
+            "support_n =",
+            supporter_mask.bit_count()
+        )
+
+# ============================================================
+# 檢查是否有無法繼續搜尋的SNP
+# ============================================================
+
+empty_snp_indices = [
+    j
+    for j, options
+    in enumerate(allele_options)
+    if len(options) == 0
+]
+
+
+print(
+    "SNPs with no allele supported by >=2 subjects =",
+    len(empty_snp_indices)
+)
+
+
+#e.g.,先用Chr1、Segment 1、Block 1 不設定任何停止 就計算出所有組合->找出組合中出現頻率最高的
+#Block 1
+#↓
+#所有連續位置的candidate haplotype segments
+#↓
+#150人逐一比較
+#↓
+#每一段：
+#start SNP
+#end SNP
+#haplotype sequence
+#support_n
+#frequency
+#↓
+#找出高頻的shared haplotype segment
+
+#在一個 block 裡，只要由至少 2 個連續 SNP 組成一段 haplotype，就把這一段拿去 150 人中比較，看有多少人同時具有／相容於這段 haplotype
+
+#因此第一步驟要先找出所有長度 ≥2 的連續 haplotype segments
+
+# ============================================================
+# Step 7-1：搜尋Block中所有連續2-SNP candidate haplotypes
+# ============================================================
+#
+# 目的：
+#
+# 對目前206-SNP Block中的每一對「相鄰SNP」：
+#
+# SNP1-SNP2
+# SNP2-SNP3
+# SNP3-SNP4
+# ...
+# SNP205-SNP206
+#
+# 建立所有可能的2-SNP nucleotide haplotype。
+#
+#
+# 例如：
+#
+# SNP1 = A/G
+# SNP2 = C/T
+#
+# candidate haplotypes：
+#
+# AC
+# AT
+# GC
+# GT
+#
+#
+# 然後對150人逐一判斷：
+#
+# 是否兩個位置「同時」可以支持這條haplotype。
+#
+#
+# 例如candidate = AC：
+#
+# Person1：
+# SNP1 = A/G -> 支持A
+# SNP2 = C/C -> 支持C
+# => 支持AC
+#
+# Person2：
+# SNP1 = A/A -> 支持A
+# SNP2 = T/T -> 不支持C
+# => 不支持AC
+#
+#
+# frequency =
+#
+# support_n / 150
+#
+#
+# 注意：
+#
+# 這一步不是phasing。
+# 得到的仍然是：
+#
+# genotype-compatible candidate haplotype
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 建立空的結果list
+# ------------------------------------------------------------
+#
+# 每找到一個在150人中至少有1人support的
+# 2-SNP candidate haplotype，
+# 就把結果放進這裡。
+# ------------------------------------------------------------
+
+haplotype_len2_results = []
+
+
+# ------------------------------------------------------------
+# 2. 依序處理所有相鄰SNP pair
+# ------------------------------------------------------------
+#
+# 206顆SNP：
+#
+# j = 0
+# -> SNP1 + SNP2
+#
+# j = 1
+# -> SNP2 + SNP3
+#
+# ...
+#
+# j = 204
+# -> SNP205 + SNP206
+#
+# 所以range只走到n_snps - 1
+# ------------------------------------------------------------
+
+for j in range(n_snps - 1):
+
+
+    # --------------------------------------------------------
+    # 3. 抓第一顆SNP的allele options
+    # --------------------------------------------------------
+    #
+    # 例如：
+    #
+    # SNP1 = A/G
+    #
+    # options_left可能是：
+    #
+    # [
+    #   ("A", supporter_mask),
+    #   ("G", supporter_mask)
+    # ]
+    # --------------------------------------------------------
+
+    options_left = allele_options[j]
+
+
+    # --------------------------------------------------------
+    # 4. 抓第二顆SNP的allele options
+    # --------------------------------------------------------
+
+    options_right = allele_options[j + 1]
+
+
+    # --------------------------------------------------------
+    # 5. 窮舉這兩顆SNP的allele combinations
+    # --------------------------------------------------------
+    #
+    # 如果：
+    #
+    # SNP1 = A/G
+    # SNP2 = C/T
+    #
+    # 最多就是：
+    #
+    # AC
+    # AT
+    # GC
+    # GT
+    # --------------------------------------------------------
+
+    for (
+        allele_left,
+        mask_left
+    ) in options_left:
+
+
+        for (
+            allele_right,
+            mask_right
+        ) in options_right:
+
+
+            # ------------------------------------------------
+            # 6. 找同時支持兩個allele的人
+            # ------------------------------------------------
+            #
+            # mask_left：
+            # 支持第一顆SNP allele的人
+            #
+            # mask_right：
+            # 支持第二顆SNP allele的人
+            #
+            # 使用bitwise AND：
+            #
+            # 只有兩邊都support的人才留下。
+            # ------------------------------------------------
+
+            shared_mask = (
+                mask_left
+                &
+                mask_right
+            )
+
+
+            # ------------------------------------------------
+            # 7. 計算共同support人數
+            # ------------------------------------------------
+
+            support_n = (
+                shared_mask.bit_count()
+            )
+
+
+            # ------------------------------------------------
+            # 8. 如果150人完全沒有人support
+            # 就不用記錄
+            # ------------------------------------------------
+            #
+            # frequency = 0的組合直接排除。
+            #
+            # 這符合你前面說的：
+            #
+            # 「150人中找不到出現的組合就排除」
+            # ------------------------------------------------
+
+            if support_n == 0:
+
+                continue
+
+
+            # ------------------------------------------------
+            # 9. 建立2-SNP haplotype sequence
+            # ------------------------------------------------
+            #
+            # 例如：
+            #
+            # allele_left = A
+            # allele_right = C
+            #
+            # haplotype = AC
+            # ------------------------------------------------
+
+            haplotype = (
+                allele_left
+                +
+                allele_right
+            )
+
+
+            # ------------------------------------------------
+            # 10. 計算frequency
+            # ------------------------------------------------
+
+            frequency = (
+                support_n
+                /
+                n_subjects
+            )
+
+
+            # ------------------------------------------------
+            # 11. 把結果存起來
+            # ------------------------------------------------
+            #
+            # start_index：
+            # haplotype從Block中的第幾顆SNP開始
+            #
+            # end_index：
+            # 到第幾顆SNP結束
+            #
+            # length：
+            # 現在固定=2
+            #
+            # start_snp / end_snp：
+            # variant ID
+            #
+            # haplotype：
+            # nucleotide sequence
+            #
+            # support_n：
+            # 150人中多少人compatible
+            #
+            # frequency：
+            # support_n / 150
+            # ------------------------------------------------
+
+            haplotype_len2_results.append(
+                {
+                    "start_index": j + 1,
+                    "end_index": j + 2,
+
+                    "start_snp": snp_ids[j],
+                    "end_snp": snp_ids[j + 1],
+
+                    "haplotype_length": 2,
+
+                    "haplotype": haplotype,
+
+                    "support_n": support_n,
+
+                    "frequency_150": frequency
+                }
+            )
+# ------------------------------------------------------------
+# 查看最高frequency的前20條2-SNP haplotypes
+# ------------------------------------------------------------
+
+print(
+    haplotype_len2_df[
+        [
+            "start_index",
+            "end_index",
+            "start_snp",
+            "end_snp",
+            "haplotype",
+            "support_n",
+            "frequency_150"
+        ]
+    ].head(20)
+)
+
+#做length >= 2的完整搜索
+# ============================================================
+# Step 7-1：準備完整搜尋
+# ============================================================
+#
+# 目的：
+#
+# 搜尋目前206-SNP Block中所有：
+#
+# contiguous haplotype
+# 且 haplotype length >= 2
+#
+#
+# 例如：
+#
+# SNP1-SNP2
+# SNP1-SNP2-SNP3
+# SNP1-SNP2-SNP3-SNP4
+# ...
+#
+# SNP2-SNP3
+# SNP2-SNP3-SNP4
+# ...
+#
+#
+# 每一條candidate haplotype都要確認：
+#
+# 有多少位subjects的genotype
+# 可以「同時」支持整段haplotype。
+#
+#
+# 只保留：
+#
+# support_n >= 2
+#
+#
+# frequency =
+# support_n / 150
+# ============================================================
+
+
+from collections import defaultdict, Counter
+
+import pandas as pd
+
+
+# ------------------------------------------------------------
+# 1. 最低共同support人數
+# ------------------------------------------------------------
+#
+# 至少2人才算「共同出現」
+# ------------------------------------------------------------
+
+min_support = 2
+
+
+# ------------------------------------------------------------
+# 2. 建立150人全部為True的初始support mask
+# ------------------------------------------------------------
+#
+# 每開始一個新的haplotype區段時，
+# 一開始150人都是potential supporters。
+# ------------------------------------------------------------
+
+full_support_mask = (
+    (1 << n_subjects) - 1
+)
+
+
+# ------------------------------------------------------------
+# 3. 保存每一個start-end interval的摘要
+# ------------------------------------------------------------
+#
+# 之後每一列會代表一個：
+#
+# SNP start -> SNP end
+#
+# 例如：
+#
+# SNP1-SNP2
+# SNP1-SNP3
+# SNP1-SNP4
+# ...
+# ------------------------------------------------------------
+
+interval_summary_results = []
+
+
+# ------------------------------------------------------------
+# 4. 整個Block的support frequency distribution
+# ------------------------------------------------------------
+#
+# 例如：
+#
+# support_n = 100
+# -> 全部interval中有多少條candidate haplotypes
+#
+# support_n = 99
+# -> 有多少條
+#
+# ...
+# ------------------------------------------------------------
+
+global_support_distribution = Counter()
+
+
+# ------------------------------------------------------------
+# 5. 記錄整個Block最高support_n
+# ------------------------------------------------------------
+
+global_max_support = 0
+
+
+# ------------------------------------------------------------
+# 6. 記錄總共有多少candidate haplotypes
+# ------------------------------------------------------------
+
+global_candidate_haplotype_n = 0
+
+
+# ============================================================
+# Step 7-3.5：把前面搜尋完成的interval結果轉成DataFrame
+# ============================================================
+#
+# 前面的搜尋過程會把每個contiguous interval的結果
+# 暫存在 interval_summary_results
+#
+# 例如：
+#
+# SNP1-SNP2
+# SNP1-SNP3
+# SNP1-SNP4
+# ...
+# SNP205-SNP206
+#
+# 每一段都包含：
+# start SNP
+# end SNP
+# haplotype length
+# maximum support
+# maximum frequency
+# 等資訊
+#
+# 現在把這個list正式轉成pandas DataFrame，
+# 之後7-4才能做整個Block的統計。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 先確認前面的結果物件還存在
+# ------------------------------------------------------------
+
+print(
+    "interval_summary_results exists =",
+    "interval_summary_results" in globals()
+)
+
+
+# ------------------------------------------------------------
+# 2. 如果存在，確認裡面有多少筆結果
+# ------------------------------------------------------------
+
+if "interval_summary_results" in globals():
+
+    print(
+        "Number of interval results =",
+        len(interval_summary_results)
+    )
+
+# ------------------------------------------------------------
+# 3. 將list轉成DataFrame
+# ------------------------------------------------------------
+
+interval_summary_df = pd.DataFrame(
+    interval_summary_results
+)
+
+
+# ------------------------------------------------------------
+# 4. 確認DataFrame成功建立
+# ------------------------------------------------------------
+
+print(
+    "interval_summary_df shape =",
+    interval_summary_df.shape
+)
+
+print(
+    "Columns =",
+    interval_summary_df.columns.tolist()
+)
+
+
+#查看前10筆
+print(
+    interval_summary_df.head(10)
+)
+
+# ============================================================
+# Step 7-4：查看整個Block的結果
+# ============================================================
+
+print(
+    "\n========================================"
+)
+
+print(
+    "Analysis completed."
+)
+
+
+# ------------------------------------------------------------
+# 1. 總共分析多少個contiguous SNP intervals
+# ------------------------------------------------------------
+
+print(
+    "Total contiguous intervals analyzed =",
+    len(interval_summary_df)
+)
+
+# ============================================================
+# Step 7-5：找最高frequency所在的interval
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 抓所有達到global maximum support的interval
+# ------------------------------------------------------------
+
+best_intervals = (
+    interval_summary_df[
+        interval_summary_df[
+            "max_support_n"
+        ]
+        ==
+        global_max_support
+    ]
+    .copy()
+)
+
+
+# ------------------------------------------------------------
+# 優先顯示較長的haplotype
+# ------------------------------------------------------------
+#
+# 因為如果：
+#
+# 2-SNP haplotype有100人
+# 8-SNP haplotype也有100人
+#
+# 8-SNP通常對你的enrichment目的更有資訊。
+# ------------------------------------------------------------
+
+best_intervals = (
+    best_intervals
+    .sort_values(
+        by="haplotype_length",
+        ascending=False
+    )
+    .reset_index(
+        drop=True
+    )
+)
+
+
+print(
+    "\nIntervals with global maximum frequency:"
+)
+
+
+print(
+    best_intervals[
+        [
+            "start_index",
+            "end_index",
+            "start_snp",
+            "end_snp",
+            "haplotype_length",
+            "max_support_n",
+            "max_frequency",
+            "max_support_haplotype_n"
+        ]
+    ].head(20)
+)
+
+# ============================================================
+# Step 7-6：整個Block的frequency distribution
+# ============================================================
+
+
+print(
+    "\nHaplotype frequency distribution:"
+)
+
+
+# ------------------------------------------------------------
+# 從最多人共同support開始往下列
+# ------------------------------------------------------------
+
+for support_n in sorted(
+    global_support_distribution.keys(),
+    reverse=True
+):
+
+
+    #這個support level共有多少candidate haplotypes
+    haplotype_n = (
+        global_support_distribution[
+            support_n
+        ]
+    )
+
+
+    #subject-level compatible frequency
+    frequency = (
+        support_n
+        /
+        n_subjects
+    )
+
+
+    print(
+        f"support_n = {support_n:3d} | "
+        f"frequency = {frequency:.6f} | "
+        f"candidate haplotypes = {haplotype_n:,}"
+    )
+
+#Chr1 / Segment1 / Block1 裡，第 159–165 顆 SNP 的那一段，並把那個 150/150 都 compatible 的 7-SNP candidate haplotype sequence 找出來
+# ============================================================
+# 抓出 Chr1 / Segment1 / Block1 中
+# 第159–165顆SNP的資訊
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 指定區段
+# ------------------------------------------------------------
+#
+# 注意：
+# Python是0-based index
+#
+# 第159顆SNP -> index 158
+# 第165顆SNP -> index 164
+# ------------------------------------------------------------
+
+start_idx = 158
+end_idx = 164
+
+
+# ------------------------------------------------------------
+# 2. 抓出這7顆SNP的variant ID
+# ------------------------------------------------------------
+
+target_snp_ids = snp_ids[
+    start_idx:end_idx + 1
+]
+
+
+print(
+    "Target SNP IDs:"
+)
+
+for i, snp in enumerate(
+    target_snp_ids,
+    start=159
+):
+    print(
+        i,
+        snp
+    )
+
+# ============================================================
+# 3. 搜尋159–165這7顆SNP的所有candidate haplotypes
+# 並只留下support_n = 150的
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 一開始150人全部support
+# ------------------------------------------------------------
+
+full_support_mask = (
+    (1 << n_subjects) - 1
+)
+
+
+# ------------------------------------------------------------
+# stack內容：
+#
+# current_index
+# haplotype_sequence
+# supporter_mask
+# ------------------------------------------------------------
+
+stack = [
+    (
+        start_idx,
+        "",
+        full_support_mask
+    )
+]
+
+
+#用來保存150/150共同支持的haplotype
+target_haplotypes_150 = []
+
+
+# ------------------------------------------------------------
+# 開始搜尋
+# ------------------------------------------------------------
+
+while stack:
+
+    (
+        current_index,
+        haplotype_sequence,
+        current_support_mask
+    ) = stack.pop()
+
+
+    # --------------------------------------------------------
+    # 如果已經超過end_idx
+    # 代表7顆SNP都處理完成
+    # --------------------------------------------------------
+
+    if current_index > end_idx:
+
+        support_n = (
+            current_support_mask.bit_count()
+        )
+
+
+        #只保留150/150
+        if support_n == 150:
+
+            target_haplotypes_150.append(
+                haplotype_sequence
+            )
+
+        continue
+
+
+    # --------------------------------------------------------
+    # 嘗試目前SNP的所有alleles
+    # --------------------------------------------------------
+
+    for (
+        allele,
+        allele_support_mask
+    ) in allele_options[
+        current_index
+    ]:
+
+
+        #目前supporter取交集
+        new_support_mask = (
+            current_support_mask
+            &
+            allele_support_mask
+        )
+
+
+        #還剩多少人support
+        support_n = (
+            new_support_mask.bit_count()
+        )
+
+
+        # ----------------------------------------------------
+        # 因為我們現在只找150/150，
+        # 只要掉到149以下，
+        # 就不可能之後重新回到150。
+        #
+        # 所以直接prune。
+        # ----------------------------------------------------
+
+        if support_n < 150:
+
+            continue
+
+
+        #繼續下一顆SNP
+        stack.append(
+            (
+                current_index + 1,
+                haplotype_sequence + allele,
+                new_support_mask
+            )
+        )
+
+# ============================================================
+# 4. 查看這7顆SNP中150/150共同支持的haplotype
+# ============================================================
+
+print(
+    "Number of 150/150 supported haplotypes =",
+    len(target_haplotypes_150)
+)
+
+print(
+    "Haplotype(s) =",
+    target_haplotypes_150
+)
+
+#① Frequency construction
+#所有 Chr
+#→ Segment
+#→ Block
+#→ contiguous haplotypes ≥2 SNP
+#→ remove freq=1
+#→ Block representative
+#→ Segment representative frequency
+#② Arrangement
+#利用每個Segment的representative frequency
+#進行新的空間排列
+#③ Coloring
+#把新的排列結果轉成影像表示
+#④ CNN
+#再根據這個資料結構
+#選適合的CNN architecture
+#並進行模型比較
+
+
+#邏輯順序：
+#單一block找出freq max ->segment中：多個block中找freq max ->代表那個segment
+#再接續排序->上色->cnn
+
+# ============================================================
+# Step 1：建立單一Block representative haplotype function
+# ============================================================
+# representative haplotype：
+# 1. contiguous SNPs
+# 2. 至少2個SNP
+# 3. frequency = 1 的haplotype排除
+# 4. frequency最高者優先
+# 5. frequency相同 → SNP數較少者優先
+
+import pandas as pd
+import numpy as np
+
+from collections import defaultdict
+# ============================================================
+# Step 1-1：nucleotide genotype轉成允許的alleles
+# ============================================================
+#
+# 例如：
+#
+# A/A -> {"A"}
+#
+# A/G -> {"A","G"}
+#
+# C/T -> {"C","T"}
+#
+# G/G -> {"G"}
+#
+# NoCall -> empty set
+#
+#
+# 之後搜尋haplotype時：
+#
+# 如果candidate某個位置需要A，
+# 那A/A與A/G都可以support。
+# ============================================================
+
+
+ALLELES = (
+    "A",
+    "C",
+    "G",
+    "T"
+)
+
+
+def genotype_to_alleles(genotype):
+
+    # --------------------------------------------------------
+    # missing value
+    # --------------------------------------------------------
+
+    if pd.isna(genotype):
+
+        return set()
+
+
+    # --------------------------------------------------------
+    # 統一格式
+    # --------------------------------------------------------
+
+    genotype = (
+        str(genotype)
+        .strip()
+        .upper()
+    )
+
+
+    # --------------------------------------------------------
+    # NoCall不提供任何allele evidence
+    # --------------------------------------------------------
+
+    if genotype in {
+        "NOCALL",
+        "NO CALL",
+        "NA",
+        "NAN",
+        ""
+    }:
+
+        return set()
+
+
+    # --------------------------------------------------------
+    # 例如A/G拆成：
+    #
+    # ["A","G"]
+    # --------------------------------------------------------
+
+    parts = genotype.split("/")
+
+
+    #正常diploid genotype應有兩個alleles
+    if len(parts) != 2:
+
+        return set()
+
+
+    # --------------------------------------------------------
+    # 只接受A/C/G/T
+    # --------------------------------------------------------
+
+    if (
+        parts[0] not in ALLELES
+        or
+        parts[1] not in ALLELES
+    ):
+
+        return set()
+
+
+    # --------------------------------------------------------
+    # set會自動處理：
+    #
+    # A/A -> {"A"}
+    #
+    # A/G -> {"A","G"}
+    # --------------------------------------------------------
+
+    return set(parts)
+
+# ============================================================
+# Step 1-2：單一Block選representative haplotype
+# ============================================================
+
+
+def select_block_representative(
+    block_geno_df
+):
+
+    # ========================================================
+    # A. 基本資料
+    # ========================================================
+
+    #這個Block共有多少subjects
+    n_subjects = (
+        block_geno_df.shape[0]
+    )
+
+
+    #這個Block共有多少SNP
+    n_snps = (
+        block_geno_df.shape[1]
+    )
+
+
+    #保存SNP ID
+    snp_ids = (
+        block_geno_df.columns.to_numpy()
+    )
+
+
+    #保存subject ID
+    sample_ids = (
+        block_geno_df.index.to_numpy()
+    )
+
+
+    # --------------------------------------------------------
+    # 如果Block只有0或1顆SNP
+    #
+    # 因為規定：
+    # haplotype至少需要2個SNP，
+    #
+    # 所以這種Block無法產生candidate haplotype。
+    # --------------------------------------------------------
+
+    if n_snps < 2:
+
+        return {
+            "status": "less_than_2_snps",
+            "SNP_n": n_snps
+        }
+
+
+    # ========================================================
+    # B. 建立每顆SNP的allele supporter bitmask
+    # ========================================================
+    #
+    # allele_options[j]
+    #
+    # 代表第j顆SNP：
+    #
+    # [
+    #     ("A", supporter_mask),
+    #     ("G", supporter_mask)
+    # ]
+    #
+    #
+    # supporter_mask會記錄150人中
+    # 哪些人的genotype可以support這個allele。
+    # ========================================================
+
+    allele_options = []
+
+
+    #逐顆SNP處理
+    for j in range(n_snps):
+
+
+        #目前第j顆SNP
+        genotypes = (
+            block_geno_df.iloc[:, j]
+        )
+
+
+        #這顆SNP的allele options
+        options_now = []
+
+
+        # ----------------------------------------------------
+        # 分別檢查A/C/G/T
+        # ----------------------------------------------------
+
+        for allele in ALLELES:
+
+
+            #一開始沒有人support
+            supporter_mask = 0
+
+
+            # ------------------------------------------------
+            # 逐一檢查subjects
+            # ------------------------------------------------
+
+            for i, genotype in enumerate(
+                genotypes
+            ):
+
+
+                #這個人的genotype允許哪些alleles
+                allowed_alleles = (
+                    genotype_to_alleles(
+                        genotype
+                    )
+                )
+
+
+                #如果目前allele存在於allowed alleles中
+                if allele in allowed_alleles:
+
+                    #把第i個subject的bit設成1
+                    supporter_mask |= (
+                        1 << i
+                    )
+
+
+            # ------------------------------------------------
+            # 有至少1個subject支持才需要留下
+            #
+            # frequency = 0的allele不用搜尋。
+            # ------------------------------------------------
+
+            if supporter_mask.bit_count() >= 1:
+
+                options_now.append(
+                    (
+                        allele,
+                        supporter_mask
+                    )
+                )
+
+
+        #保存這顆SNP
+        allele_options.append(
+            options_now
+        )
+
+
+    # ========================================================
+    # C. 準備搜尋最佳haplotype
+    # ========================================================
+
+    #150人全部support的initial mask
+    full_support_mask = (
+        (1 << n_subjects) - 1
+    )
+
+
+    # --------------------------------------------------------
+    # best_result最後保存：
+    #
+    # 目前整個Block找到的最佳representative haplotype
+    # --------------------------------------------------------
+
+    best_result = None
+
+
+    # --------------------------------------------------------
+    # 目前最高support人數
+    #
+    # frequency = support_n / 150
+    #
+    # 因此比較support_n
+    # 就等同於比較frequency。
+    # --------------------------------------------------------
+
+    best_support_n = 0
+
+
+    # --------------------------------------------------------
+    # 當support_n相同時，
+    # 老師規定：
+    #
+    # SNP數較少者優先。
+    # --------------------------------------------------------
+
+    best_length = float("inf")
+
+
+    # ========================================================
+    # D. 從Block中每一顆SNP當作起點
+    # ========================================================
+    #
+    # 例如：
+    #
+    # start=1
+    #
+    # SNP1-2
+    # SNP1-3
+    # SNP1-4
+    # ...
+    #
+    #
+    # start=2
+    #
+    # SNP2-3
+    # SNP2-4
+    # ...
+    # ========================================================
+
+    for start_index in range(
+        n_snps - 1
+    ):
+
+
+        # ----------------------------------------------------
+        # frontier：
+        #
+        # key
+        # = supporter mask
+        #
+        # value
+        # = 一條可以產生這個supporter group的
+        #   haplotype sequence
+        #
+        #
+        # 重要：
+        #
+        # 如果不同haplotype sequence
+        # 最後supporter完全相同，
+        #
+        # 對我們目前「找最高frequency」的目的來說，
+        # 只需要保留其中一條即可。
+        # ----------------------------------------------------
+
+        frontier = {
+            full_support_mask: ""
+        }
+
+
+        # ====================================================
+        # E. 從start SNP往右延伸
+        # ====================================================
+
+        for end_index in range(
+            start_index,
+            n_snps
+        ):
+
+
+            #加入目前SNP之後的新frontier
+            new_frontier = {}
+
+
+            # ------------------------------------------------
+            # 逐一處理目前所有partial haplotypes
+            # ------------------------------------------------
+
+            for (
+                current_support_mask,
+                current_sequence
+            ) in frontier.items():
+
+
+                # --------------------------------------------
+                # 嘗試目前SNP的alleles
+                # --------------------------------------------
+
+                for (
+                    allele,
+                    allele_support_mask
+                ) in allele_options[
+                    end_index
+                ]:
+
+
+                    # ----------------------------------------
+                    # supporter取交集
+                    #
+                    # 必須：
+                    #
+                    # 前面所有SNP都support
+                    #
+                    # AND
+                    #
+                    # 現在這顆SNP也support
+                    # ----------------------------------------
+
+                    new_support_mask = (
+                        current_support_mask
+                        &
+                        allele_support_mask
+                    )
+
+
+                    #目前共同support人數
+                    support_n = (
+                        new_support_mask.bit_count()
+                    )
+
+
+                    # ----------------------------------------
+                    # 完全沒有人support
+                    # -> frequency = 0
+                    #
+                    # 直接排除。
+                    # ----------------------------------------
+
+                    if support_n == 0:
+
+                        continue
+
+
+                    # ----------------------------------------
+                    # 建立新的haplotype sequence
+                    # ----------------------------------------
+
+                    new_sequence = (
+                        current_sequence
+                        +
+                        allele
+                    )
+
+
+                    # ----------------------------------------
+                    # 如果相同supporter mask已經存在，
+                    #
+                    # 不需要再存另一條sequence，
+                    # 因為目前我們只需要找representative。
+                    # ----------------------------------------
+
+                    if (
+                        new_support_mask
+                        not in new_frontier
+                    ):
+
+                        new_frontier[
+                            new_support_mask
+                        ] = new_sequence
+
+
+            #更新frontier
+            frontier = new_frontier
+
+
+            # ------------------------------------------------
+            # 如果已經沒有任何candidate，
+            # 後面不可能重新出現，
+            # 直接停止這個start position。
+            # ------------------------------------------------
+
+            if len(frontier) == 0:
+
+                break
+
+
+            # =================================================
+            # F. 計算目前haplotype長度
+            # =================================================
+
+            haplotype_length = (
+                end_index
+                -
+                start_index
+                +
+                1
+            )
+
+
+            # ------------------------------------------------
+            # 老師規定：
+            #
+            # haplotype至少需要2個SNP。
+            #
+            # length=1不進行代表性比較。
+            # ------------------------------------------------
+
+            if haplotype_length < 2:
+
+                continue
+
+
+            # =================================================
+            # G. 評估目前interval中的candidate haplotypes
+            # =================================================
+
+            for (
+                supporter_mask,
+                haplotype_sequence
+            ) in frontier.items():
+
+
+                #共同support人數
+                support_n = (
+                    supporter_mask.bit_count()
+                )
+
+
+                #frequency
+                frequency = (
+                    support_n
+                    /
+                    n_subjects
+                )
+
+
+                # --------------------------------------------
+                # 老師最新規則：
+                #
+                # frequency = 1
+                #
+                # 表示150人全部都compatible，
+                # 沒有區分資訊。
+                #
+                # 所以直接刪除。
+                # --------------------------------------------
+
+                if frequency == 1:
+
+                    continue
+
+
+                # =================================================
+                # H. 判斷是否比目前best更好
+                # =================================================
+                #
+                # Rule 1：
+                #
+                # frequency較高
+                # -> 優先
+                #
+                #
+                # Rule 2：
+                #
+                # frequency相同
+                # -> SNP數較少優先
+                # =================================================
+
+                better_candidate = False
+
+
+                #frequency較高
+                if support_n > best_support_n:
+
+                    better_candidate = True
+
+
+                #frequency一樣
+                #但haplotype比較短
+                elif (
+                    support_n
+                    ==
+                    best_support_n
+                    and
+                    haplotype_length
+                    <
+                    best_length
+                ):
+
+                    better_candidate = True
+
+
+                # =================================================
+                # I. 更新best result
+                # =================================================
+
+                if better_candidate:
+
+
+                    #更新最高support
+                    best_support_n = (
+                        support_n
+                    )
+
+
+                    #更新最短SNP長度
+                    best_length = (
+                        haplotype_length
+                    )
+
+
+                    #找實際有哪些subjects support
+                    supporter_indices = [
+                        i
+                        for i in range(
+                            n_subjects
+                        )
+                        if (
+                            supporter_mask
+                            &
+                            (1 << i)
+                        )
+                    ]
+
+
+                    supporter_samples = [
+                        sample_ids[i]
+                        for i in supporter_indices
+                    ]
+
+
+                    #保存完整representative資訊
+                    best_result = {
+
+                        "status":
+                            "representative_found",
+
+                        "start_index":
+                            start_index + 1,
+
+                        "end_index":
+                            end_index + 1,
+
+                        "start_snp":
+                            snp_ids[
+                                start_index
+                            ],
+
+                        "end_snp":
+                            snp_ids[
+                                end_index
+                            ],
+
+                        "haplotype_length":
+                            haplotype_length,
+
+                        "haplotype":
+                            haplotype_sequence,
+
+                        "support_n":
+                            support_n,
+
+                        "frequency":
+                            frequency,
+
+                        "support_samples":
+                            supporter_samples
+                    }
+
+
+    # ========================================================
+    # J. 整個Block搜尋完成
+    # ========================================================
+
+    # --------------------------------------------------------
+    # 如果所有candidate都是frequency=1
+    # 或沒有合法>=2 SNP haplotype，
+    # 就沒有representative。
+    # --------------------------------------------------------
+
+    if best_result is None:
+
+        return {
+            "status":
+                "no_informative_haplotype",
+
+            "SNP_n":
+                n_snps
+        }
+
+
+    # --------------------------------------------------------
+    # 回傳這個Block的representative
+    # --------------------------------------------------------
+
+    return best_result
+
+# ============================================================
+# 測試目前Chr1 / Segment1 / Block1
+# ============================================================
+
+block1_representative = (
+    select_block_representative(
+        geno_df
+    )
+)
+
+
+print( block1_representative)
+
+# ============================================================
+# 顯示最重要的結果
+# ============================================================
+
+print(
+    "Status =",
+    block1_representative[
+        "status"
+    ]
+)
+
+print(
+    "Start SNP index =",
+    block1_representative[
+        "start_index"
+    ]
+)
+
+print(
+    "End SNP index =",
+    block1_representative[
+        "end_index"
+    ]
+)
+
+print(
+    "Haplotype length =",
+    block1_representative[
+        "haplotype_length"
+    ]
+)
+
+print(
+    "Haplotype =",
+    block1_representative[
+        "haplotype"
+    ]
+)
+
+print(
+    "Support_n =",
+    block1_representative[
+        "support_n"
+    ]
+)
+
+print(
+    "Frequency =",
+    block1_representative[
+        "frequency"
+    ]
+)
+
+# frequency = 1、也就是 150/150 的 haplotypes 已經全部排除。
+#剩下的 candidate haplotypes 中，最高 frequency 是：149/150=0.99333 
+#有不只一段 haplotype 可能都是 149/150
+#因此frequency 相同 → 在用選 SNP 數較少的
+#最後選到：SNP4–SNP5 length = 2 freq=0.993
+#作為這個 Block 的 representative haplotype
+
+# ============================================================
+# Step 2-2：Python讀取全部Block metadata與.pgen
+# ============================================================
+#
+# 這一步目的只有：
+#
+# 1. 讀取剛剛R輸出的517,846 SNP metadata
+# 2. 開啟150人的.pgen
+# 3. 測試讀取第一顆SNP
+#
+# 確認沒問題後，
+# 下一步才開始建立：
+#
+# Block -> nucleotide genotype DataFrame
+# ============================================================
+
+# ============================================================
+# 安裝 pgenlib
+# ============================================================
+
+%pip install pgenlib
+import pandas as pd
+import numpy as np
+import pgenlib
+# ============================================================
+# 確認 pgenlib 可以成功載入
+# ============================================================
+
+import pgenlib
+
+print("pgenlib imported successfully.")
+
+#block_metadata→ 只負責告訴Python：Chr / Segment / Block / variant_id
+#.pvar→ 只負責：variant_id → 真正的.pgen row index
+#.pgen→ 直接讀150人的genotype
+#select_block_representative()→ 使用剛剛已經完成的function
+
+#準備全部 2,840 Blocks 的 PGEN mapping
+# ============================================================
+# Step 3：建立 variant_id → 真正PGEN index 的mapping
+# ============================================================
+#
+# 不重新做Segment / Block。
+#
+# 原本R建立好的：
+#
+# Chr
+# Segment
+# Block
+#
+# 全部保留。
+#
+# 這一步只利用.pvar確認每顆variant
+# 在.pgen中的真正0-based row index。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 建立：
+#
+# variant ID -> PGEN 0-based index
+#
+# 因為.pvar的row順序
+# 就等於.pgen的variant順序。
+# ------------------------------------------------------------
+
+variant_to_pgen_index = {
+    variant_id: index
+
+    for index, variant_id
+    in enumerate(
+        pvar_df["ID"]
+    )
+}
+
+
+print(
+    "Number of variants in PGEN mapping =",
+    len(variant_to_pgen_index)
+)
+
+#把這個 mapping 接回原本已經切好的 block_metadata
+# ============================================================
+# 2. 將真正的PGEN index接到既有Block metadata
+# ============================================================
+
+block_metadata[
+    "true_pgen_index"
+] = (
+    block_metadata[
+        "variant_id"
+    ]
+    .map(
+        variant_to_pgen_index
+    )
+)
+# ============================================================
+# 3. QC：確認517,846顆SNP全部成功對應
+# ============================================================
+
+print(
+    "Total SNPs =",
+    len(block_metadata)
+)
+
+print(
+    "Missing PGEN index =",
+    block_metadata[
+        "true_pgen_index"
+    ]
+    .isna()
+    .sum()
+)
+
+print(
+    "Mapped PGEN index =",
+    block_metadata[
+        "true_pgen_index"
+    ]
+    .notna()
+    .sum()
+)
+
+#直接跑2840個bolcks
+#規則：
+#haplotype length ≥ 2
+#→ freq = 1 排除
+#→ frequency 最大
+#→ frequency 相同選 SNP 數較少
+
+# ============================================================
+# Step 4-1：直接從PGEN計算單一Block representative
+# ============================================================
+#
+# 不建立每個Block的CSV
+# 不建立完整nucleotide genotype DataFrame
+#
+# 直接：
+#
+# PGEN genotype code
+#       ↓
+# allele supporter bitmask
+#       ↓
+# contiguous haplotype search
+#       ↓
+# Block representative
+#
+#
+# PGEN hardcall：
+#
+# 0 = REF/REF
+# 1 = REF/ALT
+# 2 = ALT/ALT
+#
+# 其他code一律當作missing / NoCall，
+# 不支持任何allele。
+# ============================================================
+
+import numpy as np
+import pandas as pd
+
+
+ALLELES = ("A", "C", "G", "T")
+
+
+# ------------------------------------------------------------
+# 將Boolean array快速轉成Python integer bitmask
+#
+# 例如150人：
+#
+# True  = 此subject支持這個allele
+# False = 不支持
+# ------------------------------------------------------------
+
+def bool_array_to_bitmask(bool_array):
+
+    packed = np.packbits(
+        np.asarray(
+            bool_array,
+            dtype=np.uint8
+        ),
+        bitorder="little"
+    )
+
+    return int.from_bytes(
+        packed.tobytes(),
+        byteorder="little"
+    )
+# ============================================================
+# Step 4-2：單一Block → representative haplotype
+# ============================================================
+
+def select_block_representative_from_pgen(
+    block_df,
+    pgen_reader,
+    n_subjects=150
+):
+
+    # --------------------------------------------------------
+    # A. Block基本資訊
+    # --------------------------------------------------------
+
+    n_snps = len(block_df)
+
+
+    #haplotype至少2 SNP
+    if n_snps < 2:
+
+        return {
+            "status": "less_than_2_snps",
+            "block_snp_n": n_snps
+        }
+
+
+    # --------------------------------------------------------
+    # B. 每顆SNP建立allele supporter mask
+    # --------------------------------------------------------
+    #
+    # allele_options[j]
+    #
+    # 例如：
+    #
+    # [
+    #   ("A", mask),
+    #   ("G", mask)
+    # ]
+    # --------------------------------------------------------
+
+    allele_options = []
+
+
+    #重複使用同一個150-person buffer
+    geno_buffer = np.empty(
+        n_subjects,
+        dtype=np.int8
+    )
+
+
+    for row in block_df.itertuples(
+        index=False
+    ):
+
+
+        #真正的0-based PGEN index
+        pgen_index = int(
+            row.true_pgen_index
+        )
+
+
+        #讀這顆SNP的150人genotype
+        pgen_reader.read(
+            pgen_index,
+            geno_buffer
+        )
+
+
+        #REF / ALT
+        ref = str(
+            row.REF
+        ).upper()
+
+        alt = str(
+            row.ALT
+        ).upper()
+
+
+        # ----------------------------------------------------
+        # REF allele：
+        #
+        # genotype 0 = REF/REF
+        # genotype 1 = REF/ALT
+        #
+        # 兩者都具有REF allele
+        # ----------------------------------------------------
+
+        ref_support = (
+            (geno_buffer == 0)
+            |
+            (geno_buffer == 1)
+        )
+
+
+        # ----------------------------------------------------
+        # ALT allele：
+        #
+        # genotype 1 = REF/ALT
+        # genotype 2 = ALT/ALT
+        # ----------------------------------------------------
+
+        alt_support = (
+            (geno_buffer == 1)
+            |
+            (geno_buffer == 2)
+        )
+
+
+        #轉成bitmask
+        ref_mask = bool_array_to_bitmask(
+            ref_support
+        )
+
+        alt_mask = bool_array_to_bitmask(
+            alt_support
+        )
+
+
+        options_now = []
+
+
+        #有subject支持REF才加入
+        if ref_mask.bit_count() > 0:
+
+            options_now.append(
+                (
+                    ref,
+                    ref_mask
+                )
+            )
+
+
+        #有subject支持ALT才加入
+        if alt_mask.bit_count() > 0:
+
+            options_now.append(
+                (
+                    alt,
+                    alt_mask
+                )
+            )
+
+
+        allele_options.append(
+            options_now
+        )
+
+
+    # --------------------------------------------------------
+    # C. 搜尋representative
+    # --------------------------------------------------------
+
+    full_support_mask = (
+        (1 << n_subjects) - 1
+    )
+
+
+    best_result = None
+
+    best_support_n = 0
+
+    best_length = float("inf")
+
+
+    #variant資訊
+    variant_ids = (
+        block_df[
+            "variant_id"
+        ].to_numpy()
+    )
+
+    positions = (
+        block_df[
+            "Start_num_v9"
+        ].to_numpy()
+    )
+
+
+    # ========================================================
+    # 每一顆SNP都可以當haplotype起點
+    # ========================================================
+
+    for start_index in range(
+        n_snps - 1
+    ):
+
+
+        # ----------------------------------------------------
+        # supporter mask → 一條candidate sequence
+        # ----------------------------------------------------
+
+        frontier = {
+            full_support_mask: ""
+        }
+
+
+        # ====================================================
+        # 往右延伸
+        # ====================================================
+
+        for end_index in range(
+            start_index,
+            n_snps
+        ):
+
+
+            new_frontier = {}
+
+
+            current_length = (
+                end_index
+                -
+                start_index
+                +
+                1
+            )
+
+
+            for (
+                current_mask,
+                current_sequence
+            ) in frontier.items():
+
+
+                for (
+                    allele,
+                    allele_mask
+                ) in allele_options[
+                    end_index
+                ]:
+
+
+                    #目前整段haplotype共同support subjects
+                    new_mask = (
+                        current_mask
+                        &
+                        allele_mask
+                    )
+
+
+                    support_n = (
+                        new_mask.bit_count()
+                    )
+
+
+                    #完全沒有人支持
+                    if support_n == 0:
+
+                        continue
+
+
+                    # ------------------------------------------------
+                    # Pruning
+                    #
+                    # 如果frequency已經低於目前best，
+                    # 後續再延伸support只會下降，
+                    # 不可能重新變好。
+                    #
+                    # 但150/150不能刪：
+                    # 因為繼續延伸後可能變成149/150。
+                    # ------------------------------------------------
+
+                    if support_n < n_subjects:
+
+                        if (
+                            support_n
+                            <
+                            best_support_n
+                        ):
+
+                            continue
+
+
+                        #frequency相同，
+                        #而且目前長度已經不比best短
+                        #後續延伸更不可能勝出
+                        if (
+                            support_n
+                            ==
+                            best_support_n
+                            and
+                            current_length
+                            >=
+                            best_length
+                        ):
+
+                            continue
+
+
+                    new_sequence = (
+                        current_sequence
+                        +
+                        allele
+                    )
+
+
+                    #相同supporter group只需要保留一條sequence
+                    if (
+                        new_mask
+                        not in new_frontier
+                    ):
+
+                        new_frontier[
+                            new_mask
+                        ] = new_sequence
+
+
+            frontier = new_frontier
+
+
+            #沒有candidate可以繼續
+            if len(frontier) == 0:
+
+                break
+
+
+            # ------------------------------------------------
+            # 老師規定：
+            # haplotype至少2 SNP
+            # ------------------------------------------------
+
+            if current_length < 2:
+
+                continue
+
+
+            # =================================================
+            # 評估目前interval
+            # =================================================
+
+            for (
+                supporter_mask,
+                haplotype_sequence
+            ) in frontier.items():
+
+
+                support_n = (
+                    supporter_mask.bit_count()
+                )
+
+
+                # --------------------------------------------
+                # frequency = 1直接排除
+                # --------------------------------------------
+
+                if support_n == n_subjects:
+
+                    continue
+
+
+                # --------------------------------------------
+                # Rule 1：
+                # support/frequency較高
+                #
+                # Rule 2：
+                # frequency相同 → SNP數較少
+                # --------------------------------------------
+
+                better = (
+                    support_n
+                    >
+                    best_support_n
+                )
+
+
+                if (
+                    support_n
+                    ==
+                    best_support_n
+                    and
+                    current_length
+                    <
+                    best_length
+                ):
+
+                    better = True
+
+
+                if better:
+
+                    best_support_n = (
+                        support_n
+                    )
+
+                    best_length = (
+                        current_length
+                    )
+
+
+                    best_result = {
+
+                        "status":
+                            "representative_found",
+
+                        "block_snp_n":
+                            n_snps,
+
+                        "start_index":
+                            start_index + 1,
+
+                        "end_index":
+                            end_index + 1,
+
+                        "start_snp":
+                            variant_ids[
+                                start_index
+                            ],
+
+                        "end_snp":
+                            variant_ids[
+                                end_index
+                            ],
+
+                        "start_position":
+                            positions[
+                                start_index
+                            ],
+
+                        "end_position":
+                            positions[
+                                end_index
+                            ],
+
+                        "haplotype_length":
+                            current_length,
+
+                        "haplotype":
+                            haplotype_sequence,
+
+                        "support_n":
+                            support_n,
+
+                        "frequency":
+                            support_n
+                            /
+                            n_subjects
+                    }
+
+
+                    # ----------------------------------------
+                    # 理論上的最佳答案：
+                    #
+                    # 最大可能frequency（排除1之後）
+                    # = 149/150
+                    #
+                    # 最短允許length
+                    # = 2
+                    #
+                    # 同時達成後，
+                    # 這個Block不可能再找到更好的結果。
+                    #
+                    # 所以立即return，大幅節省時間。
+                    # ----------------------------------------
+
+                    if (
+                        best_support_n
+                        ==
+                        n_subjects - 1
+                        and
+                        best_length
+                        ==
+                        2
+                    ):
+
+                        return best_result
+
+
+    # --------------------------------------------------------
+    # 整個Block沒有informative haplotype
+    # --------------------------------------------------------
+
+    if best_result is None:
+
+        return {
+            "status":
+                "no_informative_haplotype",
+
+            "block_snp_n":
+                n_snps
+        }
+
+
+    return best_result
+
+# ============================================================
+# Step 4-3：正式分析全部2,840 Blocks
+# ============================================================
+#
+# 每次：
+#
+# 取1個Block
+# → 從PGEN讀genotype
+# → 找representative
+# → 只保存1列result
+# → 下一個Block
+#
+#
+# 不產生2,840個CSV。
+# ============================================================
+
+from pathlib import Path
+import time
+
+
+# ------------------------------------------------------------
+# 最後結果保存位置
+# ------------------------------------------------------------
+
+output_dir = Path(
+    "/Users/sheenazhengmei/Desktop/"
+    "segment_haplotype_step2"
+)
+
+
+checkpoint_path = (
+    output_dir
+    /
+    "block_representatives_checkpoint.csv"
+)
+
+
+final_path = (
+    output_dir
+    /
+    "block_representatives_all.csv"
+)
+
+
+# ------------------------------------------------------------
+# Block grouping
+# ------------------------------------------------------------
+
+block_groups = block_metadata.groupby(
+    [
+        "Chr_id",
+        "segment_id_chr_seg1mb",
+        "block_id_in_segment_seg1mb"
+    ],
+    sort=False
+)
+
+
+total_blocks = (
+    block_groups.ngroups
+)
+
+
+print(
+    "Total Blocks =",
+    total_blocks
+)
+# ============================================================
+# Step 4-4：Loop全部Blocks
+# ============================================================
+
+block_results = []
+
+start_time = time.time()
+
+
+for block_number, (
+    (
+        chr_id,
+        segment_id,
+        block_id
+    ),
+    block_df
+) in enumerate(
+    block_groups,
+    start=1
+):
+
+
+    # --------------------------------------------------------
+    # 確保Block內依physical position排序
+    # --------------------------------------------------------
+
+    block_df = (
+        block_df
+        .sort_values(
+            [
+                "Start_num_v9",
+                "true_pgen_index"
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # 計算這個Block representative
+    # --------------------------------------------------------
+
+    result = (
+        select_block_representative_from_pgen(
+            block_df=block_df,
+            pgen_reader=pgen_reader,
+            n_subjects=150
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # 加入Chr / Segment / Block資訊
+    # --------------------------------------------------------
+
+    result_row = {
+
+        "Chr_id":
+            chr_id,
+
+        "segment_id_chr_seg1mb":
+            int(segment_id),
+
+        "block_id_in_segment_seg1mb":
+            int(block_id),
+
+        **result
+    }
+
+
+    block_results.append(
+        result_row
+    )
+
+
+    # --------------------------------------------------------
+    # 每10個Block顯示一次進度
+    # --------------------------------------------------------
+
+    if (
+        block_number % 10 == 0
+        or
+        block_number == total_blocks
+    ):
+
+        elapsed_min = (
+            time.time()
+            -
+            start_time
+        ) / 60
+
+
+        print(
+            f"Block "
+            f"{block_number}/{total_blocks} completed"
+            f" | elapsed = {elapsed_min:.2f} min"
+        )
+
+
+    # --------------------------------------------------------
+    # 每50個Block：
+    #
+    # 把目前結果覆寫到同一個checkpoint。
+    #
+    # 注意：
+    # 不是每個Block建立CSV，
+    # 永遠只有這一個checkpoint檔案。
+    # --------------------------------------------------------
+
+    if (
+        block_number % 50 == 0
+    ):
+
+        pd.DataFrame(
+            block_results
+        ).to_csv(
+            checkpoint_path,
+            index=False
+        )
+
+# ============================================================
+# Step 4-5：保存全部2,840個Block結果
+# ============================================================
+
+block_representatives_df = pd.DataFrame(
+    block_results
+)
+
+
+block_representatives_df.to_csv(
+    final_path,
+    index=False
+)
+
+
+print(
+    "\n========================================"
+)
+
+print(
+    "All Blocks completed."
+)
+
+print(
+    "Number of Block results =",
+    len(
+        block_representatives_df
+    )
+)
+
+print(
+    "Saved to =",
+    final_path
+)
+
+#找出為什麼多一個block
+# ============================================================
+# QC：找出為什麼metadata是2841 Blocks
+# ============================================================
+#
+# 先確認：
+#
+# 1. Chr / Segment / Block有沒有NA
+# 2. 每個Segment實際有幾個Block
+# 3. Block ID是否正常從1連續排到最大值
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 檢查三個Block key欄位有沒有missing
+# ------------------------------------------------------------
+
+print(
+    "NA in Chr_id =",
+    block_metadata[
+        "Chr_id"
+    ].isna().sum()
+)
+
+print(
+    "NA in segment_id =",
+    block_metadata[
+        "segment_id_chr_seg1mb"
+    ].isna().sum()
+)
+
+print(
+    "NA in block_id =",
+    block_metadata[
+        "block_id_in_segment_seg1mb"
+    ].isna().sum()
+)
+
+# ============================================================
+# 2. 每個Segment有幾個unique Blocks
+# ============================================================
+
+blocks_per_segment_check = (
+    block_metadata
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        dropna=False
+    )
+    .agg(
+        block_n=(
+            "block_id_in_segment_seg1mb",
+            lambda x: x.nunique(
+                dropna=False
+            )
+        ),
+
+        max_block_id=(
+            "block_id_in_segment_seg1mb",
+            "max"
+        ),
+
+        min_block_id=(
+            "block_id_in_segment_seg1mb",
+            "min"
+        ),
+
+        SNP_n=(
+            "variant_id",
+            "size"
+        )
+    )
+    .reset_index()
+)
+
+
+print(
+    blocks_per_segment_check.to_string(
+        index=False
+    )
+)
+
+
+print(
+    "\nTotal Blocks =",
+    blocks_per_segment_check[
+        "block_n"
+    ].sum()
+)
+
+# ============================================================
+# 3. 確認已跑完結果本身有多少unique Blocks
+# ============================================================
+
+print(
+    "Unique Blocks in results =",
+    block_representatives_df[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb"
+        ]
+    ]
+    .drop_duplicates()
+    .shape[0]
+)
+
+# ============================================================
+# QC：檢查Chr18 Segment2為什麼在Python被拆成兩組
+# ============================================================
+#
+# 目前已經確定：
+#
+# Chr18 / Segment2
+#
+# 應該只有Block 1-59，
+# 但Python結果被拆成：
+#
+# 1-39
+# 39-59
+#
+# 所以現在查看Chr_id與segment_id的
+# 真正value與Python type。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 查看Chr_id所有和18有關的值
+# ------------------------------------------------------------
+
+chr18_values = [
+    x
+    for x in block_metadata[
+        "Chr_id"
+    ].unique()
+    if str(x).strip() == "18"
+]
+
+
+print(
+    "Chr18 raw values:"
+)
+
+for x in chr18_values:
+
+    print(
+        "value =",
+        repr(x),
+        "| type =",
+        type(x).__name__
+    )
+
+# ------------------------------------------------------------
+# 2. 抓所有「看起來是Chr18」的rows
+# ------------------------------------------------------------
+
+chr18_test = block_metadata[
+    block_metadata[
+        "Chr_id"
+    ]
+    .astype(str)
+    .str.strip()
+    ==
+    "18"
+].copy()
+
+
+# ------------------------------------------------------------
+# 3. 看Segment ID真正的value/type
+# ------------------------------------------------------------
+
+print(
+    "\nChr18 Segment raw values:"
+)
+
+for x in chr18_test[
+    "segment_id_chr_seg1mb"
+].unique():
+
+    print(
+        "value =",
+        repr(x),
+        "| type =",
+        type(x).__name__
+    )
+
+
+# ------------------------------------------------------------
+# 2. 抓所有「看起來是Chr18」的rows
+# ------------------------------------------------------------
+
+chr18_test = block_metadata[
+    block_metadata[
+        "Chr_id"
+    ]
+    .astype(str)
+    .str.strip()
+    ==
+    "18"
+].copy()
+
+
+# ------------------------------------------------------------
+# 3. 看Segment ID真正的value/type
+# ------------------------------------------------------------
+
+print(
+    "\nChr18 Segment raw values:"
+)
+
+for x in chr18_test[
+    "segment_id_chr_seg1mb"
+].unique():
+
+    print(
+        "value =",
+        repr(x),
+        "| type =",
+        type(x).__name__
+    )
+
+# ------------------------------------------------------------
+# 4. 特別檢查Chr18 / Segment2 / Block39
+#
+# 因為Block39就是目前被重複計算的位置。
+# ------------------------------------------------------------
+
+block39_test = chr18_test[
+    (
+        pd.to_numeric(
+            chr18_test[
+                "segment_id_chr_seg1mb"
+            ],
+            errors="coerce"
+        )
+        ==
+        2
+    )
+    &
+    (
+        pd.to_numeric(
+            chr18_test[
+                "block_id_in_segment_seg1mb"
+            ],
+            errors="coerce"
+        )
+        ==
+        39
+    )
+]
+
+
+print(
+    "\nChr18 Segment2 Block39 SNP count =",
+    len(block39_test)
+)
+
+
+print(
+    block39_test[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb",
+            "Start_num_v9",
+            "variant_id"
+        ]
+    ].head(20)
+)
+
+# ============================================================
+# Step 4-7：統一Chr_id資料型態
+# ============================================================
+#
+# 問題：
+#
+# Chr18同時存在：
+#
+# 18      -> int
+# '18'    -> str
+#
+# Python groupby會把它們當成不同的group。
+#
+# 解法：
+#
+# 所有Chr_id統一轉成string並移除空白。
+#
+# 這樣：
+#
+# 18
+# '18'
+#
+# 都會變成：
+#
+# '18'
+#
+# X與MT也會正常保留。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 修正原始block metadata
+# ------------------------------------------------------------
+
+block_metadata[
+    "Chr_id"
+] = (
+    block_metadata[
+        "Chr_id"
+    ]
+    .astype(str)
+    .str.strip()
+)
+
+
+# ------------------------------------------------------------
+# 2. 已經跑完的Block result也一起統一
+# ------------------------------------------------------------
+
+block_representatives_df[
+    "Chr_id"
+] = (
+    block_representatives_df[
+        "Chr_id"
+    ]
+    .astype(str)
+    .str.strip()
+)
+
+# ============================================================
+# 3. 重新計算metadata中的unique Block數
+# ============================================================
+
+correct_block_n = (
+    block_metadata[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb"
+        ]
+    ]
+    .drop_duplicates()
+    .shape[0]
+)
+
+
+print(
+    "Correct unique Blocks in metadata =",
+    correct_block_n
+)
+
+# ============================================================
+# 4. 找出既有results中重複的Block
+# ============================================================
+
+duplicate_results = (
+    block_representatives_df
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb"
+        ],
+        dropna=False
+    )
+    .size()
+    .reset_index(
+        name="result_n"
+    )
+)
+
+
+duplicate_results = (
+    duplicate_results[
+        duplicate_results[
+            "result_n"
+        ] > 1
+    ]
+)
+
+
+print(
+    duplicate_results
+)
+
+# ============================================================
+# Step 4-8：重新計算Chr18 / Segment2 / Block39
+# ============================================================
+#
+# 原因：
+#
+# 先前Chr_id同時存在：
+#
+# 18
+# '18'
+#
+# 導致同一個Block39被拆成兩半各跑一次。
+#
+# 現在Chr_id已經全部統一成string，
+# 所以重新抓完整Block39，
+# 再只重跑這一個Block。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 抓完整的Chr18 / Segment2 / Block39
+# ------------------------------------------------------------
+
+block39_full = (
+    block_metadata[
+        (
+            block_metadata["Chr_id"] == "18"
+        )
+        &
+        (
+            block_metadata[
+                "segment_id_chr_seg1mb"
+            ] == 2
+        )
+        &
+        (
+            block_metadata[
+                "block_id_in_segment_seg1mb"
+            ] == 39
+        )
+    ]
+    .copy()
+)
+
+
+# ------------------------------------------------------------
+# 2. 依position與真正PGEN index排序
+# ------------------------------------------------------------
+
+block39_full = (
+    block39_full
+    .sort_values(
+        [
+            "Start_num_v9",
+            "true_pgen_index"
+        ]
+    )
+    .reset_index(
+        drop=True
+    )
+)
+
+
+# ------------------------------------------------------------
+# 3. 確認這次抓到的是完整Block39
+# ------------------------------------------------------------
+
+print(
+    "Chr18 Segment2 Block39 SNP_n =",
+    len(block39_full)
+)
+
+print(
+    "Start position =",
+    block39_full[
+        "Start_num_v9"
+    ].min()
+)
+
+print(
+    "End position =",
+    block39_full[
+        "Start_num_v9"
+    ].max()
+)
+
+# ============================================================
+# 4. 重新計算完整Block39 representative
+# ============================================================
+
+block39_correct_result = (
+    select_block_representative_from_pgen(
+        block_df=block39_full,
+        pgen_reader=pgen_reader,
+        n_subjects=150
+    )
+)
+
+
+print(
+    block39_correct_result
+)
+
+# ============================================================
+# 5. 刪除原本兩筆Chr18 / Segment2 / Block39結果
+# ============================================================
+
+block_representatives_df = (
+    block_representatives_df[
+        ~(
+            (
+                block_representatives_df[
+                    "Chr_id"
+                ] == "18"
+            )
+            &
+            (
+                block_representatives_df[
+                    "segment_id_chr_seg1mb"
+                ] == 2
+            )
+            &
+            (
+                block_representatives_df[
+                    "block_id_in_segment_seg1mb"
+                ] == 39
+            )
+        )
+    ]
+    .copy()
+)
+# ============================================================
+# 6. 加回正確的Block39 representative
+# ============================================================
+
+block39_correct_row = {
+    "Chr_id": "18",
+    "segment_id_chr_seg1mb": 2,
+    "block_id_in_segment_seg1mb": 39,
+    **block39_correct_result
+}
+
+
+block_representatives_df = pd.concat(
+    [
+        block_representatives_df,
+        pd.DataFrame(
+            [block39_correct_row]
+        )
+    ],
+    ignore_index=True
+)
+
+# ============================================================
+# 7. 最終QC
+# ============================================================
+
+print(
+    "Number of Block results =",
+    len(
+        block_representatives_df
+    )
+)
+
+
+print(
+    "Unique Blocks =",
+    block_representatives_df[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb"
+        ]
+    ]
+    .drop_duplicates()
+    .shape[0]
+)
+
+
+print(
+    "\nStatus distribution:"
+)
+
+print(
+    block_representatives_df[
+        "status"
+    ]
+    .value_counts(
+        dropna=False
+    )
+)
+
+# ============================================================
+# Step 5-1：保存修正完成的2840個Block結果
+# ============================================================
+#
+# 這份才是正式版本：
+#
+# 2840 unique Blocks
+#
+# 已修正：
+# Chr18 / Segment2 / Block39
+# ============================================================
+
+from pathlib import Path
+import pandas as pd
+import numpy as np
+
+
+output_dir = Path(
+    "/Users/sheenazhengmei/Desktop/"
+    "segment_haplotype_step2"
+)
+
+
+final_block_path = (
+    output_dir
+    /
+    "block_representatives_all_corrected.csv"
+)
+
+
+block_representatives_df.to_csv(
+    final_block_path,
+    index=False
+)
+
+
+print(
+    "Saved corrected Block results to =",
+    final_block_path
+)
+
+print(
+    "Number of rows =",
+    len(block_representatives_df)
+)
+
+#一個 Segment 裡，哪個 Block 的 representative frequency 最高，就用那個 frequency 當這個 Segment 的代表 frequency
+#如果多個 Block 的最高 frequency 一樣，Segment frequency 本身仍然是一樣的，所以我們先保留所有並列的 Block ID，不隨便刪掉其中一個
+
+#找每個 Segment 的最高 frequency
+# ============================================================
+# Step 5-2：Block representative → Segment representative
+# ============================================================
+#
+# 老師目前的規則：
+#
+# 每個Segment
+#     ↓
+# 看其中所有Block的representative frequency
+#     ↓
+# 取最高frequency
+#     ↓
+# 當作這個Segment的representative frequency
+#
+#
+# 注意：
+#
+# less_than_2_snps的Block沒有frequency，
+# 因此不能參與frequency比較。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 只留下有成功找到representative haplotype的Blocks
+# ------------------------------------------------------------
+
+valid_block_results = (
+    block_representatives_df[
+        block_representatives_df[
+            "status"
+        ] == "representative_found"
+    ]
+    .copy()
+)
+
+
+print(
+    "Blocks with representative haplotype =",
+    len(valid_block_results)
+)
+# ============================================================
+# 2. 計算每個Segment的最高frequency
+# ============================================================
+
+segment_max_frequency = (
+    valid_block_results
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        as_index=False
+    )
+    .agg(
+        segment_frequency=(
+            "frequency",
+            "max"
+        )
+    )
+)
+
+
+print(
+    "Segments with usable frequency =",
+    len(segment_max_frequency)
+)
+# ============================================================
+# 3. 找每個Segment所有並列最高frequency的Blocks
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 把Segment最高frequency接回每個Block
+# ------------------------------------------------------------
+
+segment_best_blocks = (
+    valid_block_results
+    .merge(
+        segment_max_frequency,
+        on=[
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        how="left"
+    )
+)
+
+
+# ------------------------------------------------------------
+# 只保留：
+#
+# block frequency
+# ==
+# 該segment最高frequency
+# ------------------------------------------------------------
+
+segment_best_blocks = (
+    segment_best_blocks[
+        np.isclose(
+            segment_best_blocks[
+                "frequency"
+            ],
+            segment_best_blocks[
+                "segment_frequency"
+            ]
+        )
+    ]
+    .copy()
+)
+#整理成一個 Segment 一列
+
+# ============================================================
+# 4. 建立Segment-level summary
+# ============================================================
+#
+# 每個Segment保存：
+#
+# Chr
+# Segment ID
+# representative frequency
+# 有幾個Block並列最高
+# 哪些Block並列最高
+# ============================================================
+
+
+segment_representatives_df = (
+    segment_best_blocks
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "segment_frequency"
+        ],
+        as_index=False
+    )
+    .agg(
+
+        #有多少個Block並列最高frequency
+        n_tied_best_blocks=(
+            "block_id_in_segment_seg1mb",
+            "size"
+        ),
+
+        #把並列最高的Block ID保存起來
+        best_block_ids=(
+            "block_id_in_segment_seg1mb",
+            lambda x: ",".join(
+                map(
+                    str,
+                    sorted(
+                        x.astype(int)
+                    )
+                )
+            )
+        )
+    )
+)
+
+# ============================================================
+# 5. QC
+# ============================================================
+
+print(
+    "Number of Segment representatives =",
+    len(segment_representatives_df)
+)
+
+
+print(
+    "\nSegment frequency summary:"
+)
+
+print(
+    segment_representatives_df[
+        "segment_frequency"
+    ]
+    .describe()
+)
+
+
+print(
+    "\nNumber of tied best Blocks:"
+)
+
+print(
+    segment_representatives_df[
+        "n_tied_best_blocks"
+    ]
+    .value_counts()
+    .sort_index()
+)
+
+
+print(
+    "\nSegment results:"
+)
+
+print(
+    segment_representatives_df.to_string(
+        index=False
+    )
+)
+
+# ============================================================
+# Step 5 QC：檢查Block representative haplotype length
+# ============================================================
+#
+# 目的：
+# 確認目前frequency飽和，
+# 是否主要是因為大量Block都選到：
+#
+# 2-SNP haplotype
+# + 149/150 subjects
+# ============================================================
+
+
+valid_blocks = (
+    block_representatives_df[
+        block_representatives_df[
+            "status"
+        ] == "representative_found"
+    ]
+    .copy()
+)
+
+
+# ------------------------------------------------------------
+# 1. Haplotype length分布
+# ------------------------------------------------------------
+
+print(
+    "Haplotype length distribution:"
+)
+
+print(
+    valid_blocks[
+        "haplotype_length"
+    ]
+    .value_counts()
+    .sort_index()
+)
+
+
+# ------------------------------------------------------------
+# 2. support_n分布
+# ------------------------------------------------------------
+
+print(
+    "\nSupport_n distribution:"
+)
+
+print(
+    valid_blocks[
+        "support_n"
+    ]
+    .value_counts()
+    .sort_index(
+        ascending=False
+    )
+)
+
+
+# ------------------------------------------------------------
+# 3. 同時查看length=2且support=149有多少Blocks
+# ------------------------------------------------------------
+
+n_len2_support149 = (
+    (
+        valid_blocks[
+            "haplotype_length"
+        ] == 2
+    )
+    &
+    (
+        valid_blocks[
+            "support_n"
+        ] == 149
+    )
+).sum()
+
+
+print(
+    "\nBlocks with length=2 and support=149 =",
+    n_len2_support149
+)
+
+print(
+    "Proportion =",
+    n_len2_support149
+    /
+    len(valid_blocks)
+)
+
+#所以後來想到的是：
+#因為都是要enrich那個segment 因此在block選擇最大freq的階段:
+#如果freq相同且snp保留length都=2時 就會增家一個length單位 去找length=3時的最大freq  依序找 直到沒有相同block的 freq相同
+#然後就代表那一段block max freq 
+#再去看每一段segment
+#其中會先依據freq的大小判斷 如果在segment中freq相同 再利用length大到小排列
+#->不論 Block representative 最後是在 length 2、3、4 或更長才被找到，到了 Segment 層級，一律先比較 frequency；只有 frequency 相同時，才用較長的 haplotype 作為優先
+
+#Block內：
+#length=2開始
+#→ 找最高freq
+#→ 如果最高freq有多個haplotypes並列
+#→ length+1
+#→ 再找該length最高freq
+#→ 直到沒有並列
+#→ 得到這個Block的 representative freq + length
+
+
+#Segment內：
+#所有Block representative
+#→ 第一順位：frequency 大 → 小
+#→ frequency相同
+#→ 第二順位：length 大 → 小
+#→ 選出Segment representative Block
+
+# ============================================================
+# Step 6-1 V3
+# 固定haplotype length，
+# 找Block中最高frequency的candidate
+# ============================================================
+#
+# 排除：
+# frequency = 1
+#
+# 回傳：
+#
+# unique_max
+#   → 最高frequency只有1個candidate
+#
+# tied_max
+#   → 有多個candidate具有相同最高frequency
+#
+# no_informative_candidate
+#   → 這個length沒有freq < 1的candidate
+# ============================================================
+
+
+def get_block_max_at_length_v3(
+    allele_options,
+    variant_ids,
+    positions,
+    haplotype_length,
+    n_subjects=150
+):
+
+    #Block總SNP數
+    n_snps = len(
+        allele_options
+    )
+
+
+    #指定length超過Block大小
+    if haplotype_length > n_snps:
+
+        return {
+            "status":
+                "length_exceeds_block",
+
+            "haplotype_length":
+                haplotype_length
+        }
+
+
+    #150人全部support的initial mask
+    full_support_mask = (
+        (1 << n_subjects) - 1
+    )
+
+
+    #目前最高support
+    best_support_n = -1
+
+
+    #最高support共有多少candidate
+    best_candidate_count = 0
+
+
+    #保存其中一個最高candidate
+    best_candidate = None
+
+
+    # ========================================================
+    # 每一個contiguous interval
+    # ========================================================
+
+    for start_index in range(
+        n_snps
+        -
+        haplotype_length
+        +
+        1
+    ):
+
+
+        end_index = (
+            start_index
+            +
+            haplotype_length
+            -
+            1
+        )
+
+
+        # ----------------------------------------------------
+        # supporter mask
+        # →
+        # candidate sequence數量 + 一條示範sequence
+        # ----------------------------------------------------
+
+        frontier = {
+
+            full_support_mask: {
+                "count": 1,
+                "sequence": ""
+            }
+
+        }
+
+
+        # ====================================================
+        # 從start一路加到end
+        # ========================================================
+
+        for current_index in range(
+            start_index,
+            end_index + 1
+        ):
+
+
+            new_frontier = {}
+
+
+            for (
+                current_mask,
+                current_info
+            ) in frontier.items():
+
+
+                for (
+                    allele,
+                    allele_mask
+                ) in allele_options[
+                    current_index
+                ]:
+
+
+                    #共同supporter
+                    new_mask = (
+                        current_mask
+                        &
+                        allele_mask
+                    )
+
+
+                    support_n = (
+                        new_mask.bit_count()
+                    )
+
+
+                    #沒有人support
+                    if support_n == 0:
+
+                        continue
+
+
+                    #新的haplotype sequence
+                    new_sequence = (
+                        current_info[
+                            "sequence"
+                        ]
+                        +
+                        allele
+                    )
+
+
+                    # ------------------------------------------------
+                    # 不同sequence可能有相同supporter mask
+                    #
+                    # 但它們仍然是不同candidate，
+                    # 所以count必須累加。
+                    # ------------------------------------------------
+
+                    if new_mask in new_frontier:
+
+                        new_frontier[
+                            new_mask
+                        ][
+                            "count"
+                        ] += (
+                            current_info[
+                                "count"
+                            ]
+                        )
+
+
+                    else:
+
+                        new_frontier[
+                            new_mask
+                        ] = {
+
+                            "count":
+                                current_info[
+                                    "count"
+                                ],
+
+                            "sequence":
+                                new_sequence
+                        }
+
+
+            frontier = new_frontier
+
+
+            #已經沒有candidate
+            if len(frontier) == 0:
+
+                break
+
+
+        #這個interval沒有candidate
+        if len(frontier) == 0:
+
+            continue
+
+
+        # ====================================================
+        # 評估完整haplotype
+        # ====================================================
+
+        for (
+            supporter_mask,
+            candidate_info
+        ) in frontier.items():
+
+
+            support_n = (
+                supporter_mask.bit_count()
+            )
+
+
+            # ------------------------------------------------
+            # 老師規則：
+            # freq = 1直接刪除
+            # ------------------------------------------------
+
+            if support_n == n_subjects:
+
+                continue
+
+
+            candidate_count = (
+                candidate_info[
+                    "count"
+                ]
+            )
+
+
+            # =================================================
+            # 找到更大的frequency
+            # =================================================
+
+            if support_n > best_support_n:
+
+
+                best_support_n = (
+                    support_n
+                )
+
+
+                #新的最高值出現，
+                #tie count重新開始
+                best_candidate_count = (
+                    candidate_count
+                )
+
+
+                best_candidate = {
+
+                    "start_index":
+                        start_index + 1,
+
+                    "end_index":
+                        end_index + 1,
+
+                    "start_snp":
+                        variant_ids[
+                            start_index
+                        ],
+
+                    "end_snp":
+                        variant_ids[
+                            end_index
+                        ],
+
+                    "start_position":
+                        positions[
+                            start_index
+                        ],
+
+                    "end_position":
+                        positions[
+                            end_index
+                        ],
+
+                    "haplotype_length":
+                        haplotype_length,
+
+                    "haplotype":
+                        candidate_info[
+                            "sequence"
+                        ],
+
+                    "support_n":
+                        support_n,
+
+                    "frequency":
+                        support_n
+                        /
+                        n_subjects
+                }
+
+
+            # =================================================
+            # frequency相同
+            #
+            # 因為現在是在固定length內比較，
+            # 所以length也一定相同。
+            #
+            # 因此無法再用較短length打破tie。
+            # → candidate count累加
+            # =================================================
+
+            elif (
+                support_n
+                ==
+                best_support_n
+            ):
+
+
+                best_candidate_count += (
+                    candidate_count
+                )
+
+
+    # ========================================================
+    # 搜尋完成
+    # ========================================================
+
+
+    #沒有freq < 1的candidate
+    if best_candidate is None:
+
+        return {
+
+            "status":
+                "no_informative_candidate",
+
+            "haplotype_length":
+                haplotype_length,
+
+            "max_candidate_count":
+                0
+        }
+
+
+    #保存tie數量
+    best_candidate[
+        "max_candidate_count"
+    ] = (
+        best_candidate_count
+    )
+
+
+    #只有一個最高candidate
+    if best_candidate_count == 1:
+
+        best_candidate[
+            "status"
+        ] = "unique_max"
+
+
+    #多個最高candidate
+    else:
+
+        best_candidate[
+            "status"
+        ] = "tied_max"
+
+
+    return best_candidate
+
+#length 2
+#→ tie
+#→ length 3
+#→ tie
+#→ length 4
+#→ unique
+#→ Block representative
+
+
+# ============================================================
+# Step 6-2 V3
+# 單一Block正式選representative
+# ============================================================
+
+
+def select_block_representative_v3(
+    block_df,
+    pgen_reader,
+    n_subjects=150
+):
+
+    # ========================================================
+    # A. Block排序
+    # ========================================================
+
+    block_df = (
+        block_df
+        .sort_values(
+            [
+                "Start_num_v9",
+                "true_pgen_index"
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+    n_snps = len(
+        block_df
+    )
+
+
+    #haplotype至少2 SNP
+    if n_snps < 2:
+
+        return {
+
+            "status":
+                "less_than_2_snps",
+
+            "block_snp_n":
+                n_snps
+        }
+
+
+    # ========================================================
+    # B. SNP metadata
+    # ========================================================
+
+    variant_ids = (
+        block_df[
+            "variant_id"
+        ]
+        .to_numpy()
+    )
+
+
+    positions = (
+        block_df[
+            "Start_num_v9"
+        ]
+        .to_numpy()
+    )
+
+
+    # ========================================================
+    # C. 建立allele supporter masks
+    # ========================================================
+
+    allele_options = []
+
+
+    geno_buffer = np.empty(
+        n_subjects,
+        dtype=np.int8
+    )
+
+
+    for row in block_df.itertuples(
+        index=False
+    ):
+
+
+        #真正PGEN index
+        pgen_index = int(
+            row.true_pgen_index
+        )
+
+
+        #讀150人genotype
+        pgen_reader.read(
+            pgen_index,
+            geno_buffer
+        )
+
+
+        ref = str(
+            row.REF
+        ).upper()
+
+
+        alt = str(
+            row.ALT
+        ).upper()
+
+
+        #REF support:
+        #0=REF/REF
+        #1=REF/ALT
+        ref_support = (
+            (geno_buffer == 0)
+            |
+            (geno_buffer == 1)
+        )
+
+
+        #ALT support:
+        #1=REF/ALT
+        #2=ALT/ALT
+        alt_support = (
+            (geno_buffer == 1)
+            |
+            (geno_buffer == 2)
+        )
+
+
+        ref_mask = (
+            bool_array_to_bitmask(
+                ref_support
+            )
+        )
+
+
+        alt_mask = (
+            bool_array_to_bitmask(
+                alt_support
+            )
+        )
+
+
+        options_now = []
+
+
+        if ref_mask.bit_count() > 0:
+
+            options_now.append(
+                (
+                    ref,
+                    ref_mask
+                )
+            )
+
+
+        if alt_mask.bit_count() > 0:
+
+            options_now.append(
+                (
+                    alt,
+                    alt_mask
+                )
+            )
+
+
+        allele_options.append(
+            options_now
+        )
+
+
+    # ========================================================
+    # D. 從length=2開始
+    # ========================================================
+
+    current_length = 2
+
+
+    while current_length <= n_snps:
+
+
+        # ----------------------------------------------------
+        # 找目前length最高frequency
+        # ----------------------------------------------------
+
+        current_result = (
+            get_block_max_at_length_v3(
+
+                allele_options=
+                    allele_options,
+
+                variant_ids=
+                    variant_ids,
+
+                positions=
+                    positions,
+
+                haplotype_length=
+                    current_length,
+
+                n_subjects=
+                    n_subjects
+            )
+        )
+
+
+        # ----------------------------------------------------
+        # Case 1：
+        #
+        # 這個length所有candidate都是freq=1
+        #
+        # → 沒有informative candidate
+        # → length+1繼續
+        # ----------------------------------------------------
+
+        if (
+            current_result[
+                "status"
+            ]
+            ==
+            "no_informative_candidate"
+        ):
+
+            current_length += 1
+
+            continue
+
+
+        # ----------------------------------------------------
+        # Case 2：
+        #
+        # 最大frequency只有一個candidate
+        #
+        # → Block representative確定
+        # ----------------------------------------------------
+
+        if (
+            current_result[
+                "status"
+            ]
+            ==
+            "unique_max"
+        ):
+
+
+            result = (
+                current_result.copy()
+            )
+
+
+            result[
+                "status"
+            ] = (
+                "representative_found"
+            )
+
+
+            result[
+                "block_snp_n"
+            ] = n_snps
+
+
+            #最終代表所使用的haplotype length
+            result[
+                "resolution_length"
+            ] = current_length
+
+
+            return result
+
+
+        # ----------------------------------------------------
+        # Case 3：
+        #
+        # 最大frequency有多個candidate
+        #
+        # 現在：
+        #
+        # freq一樣
+        # length也一樣
+        #
+        # 無法用：
+        #
+        # freq desc
+        # length asc
+        #
+        # 分出candidate
+        #
+        # 所以依你的規則：
+        #
+        # length + 1
+        # ----------------------------------------------------
+
+        if (
+            current_result[
+                "status"
+            ]
+            ==
+            "tied_max"
+        ):
+
+            current_length += 1
+
+            continue
+
+
+    # ========================================================
+    # E. 一直增加到整個Block長度
+    #    還是沒有唯一candidate
+    # ========================================================
+
+    return {
+
+        "status":
+            "unresolved_tie",
+
+        "block_snp_n":
+            n_snps
+    }
+
+#freq 大的優先
+#freq相同→ length較小的優先
+
+#用 V3 跑 2,840 Blocks，建立 block_representatives_v3
+# ============================================================
+# Step 7：使用V3規則重新計算全部2,840 Blocks
+# ============================================================
+#
+# Block內規則：
+#
+# length = 2開始
+#
+# 1. 找目前length的最大frequency
+#
+# 2. 如果只有一個candidate達到最大frequency
+#    → 這個Block確定
+#
+# 3. 如果有多個candidate：
+#       frequency相同
+#       length也相同
+#
+#    → length + 1
+#
+# 4. 持續直到找到唯一candidate
+#
+#
+# 最後每個Block得到：
+#
+# frequency
+# resolution_length
+# haplotype
+# support_n
+# ============================================================
+
+import pandas as pd
+import time
+# ------------------------------------------------------------
+# 1. 再確認Chr_id全部統一成string
+# ------------------------------------------------------------
+
+block_metadata[
+    "Chr_id"
+] = (
+    block_metadata[
+        "Chr_id"
+    ]
+    .astype(str)
+    .str.strip()
+)
+
+
+# ------------------------------------------------------------
+# 2. 重新建立Block groups
+#
+# 注意：
+# 不要沿用之前可能在Chr18修正前建立的block_groups。
+# ------------------------------------------------------------
+
+block_groups_v3 = (
+    block_metadata
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb"
+        ],
+        sort=False
+    )
+)
+
+
+print(
+    "Total Blocks for V3 =",
+    block_groups_v3.ngroups
+)
+# ============================================================
+# 3. 正式跑全部2,840 Blocks
+# ============================================================
+
+block_results_v3 = []
+
+total_blocks_v3 = (
+    block_groups_v3.ngroups
+)
+
+start_time_v3 = time.time()
+
+
+for block_number, (
+    (
+        chr_id,
+        segment_id,
+        block_id
+    ),
+    block_df
+) in enumerate(
+    block_groups_v3,
+    start=1
+):
+
+
+    # --------------------------------------------------------
+    # 使用新版V3 function
+    # --------------------------------------------------------
+
+    result = (
+        select_block_representative_v3(
+            block_df=block_df,
+            pgen_reader=pgen_reader,
+            n_subjects=150
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # 加入Chr / Segment / Block識別資訊
+    # --------------------------------------------------------
+
+    result_row = {
+
+        "Chr_id":
+            chr_id,
+
+        "segment_id_chr_seg1mb":
+            int(segment_id),
+
+        "block_id_in_segment_seg1mb":
+            int(block_id),
+
+        **result
+    }
+
+
+    block_results_v3.append(
+        result_row
+    )
+
+
+    # --------------------------------------------------------
+    # 每10個Block顯示一次進度
+    # --------------------------------------------------------
+
+    if (
+        block_number % 10 == 0
+        or
+        block_number == total_blocks_v3
+    ):
+
+        elapsed_min = (
+            time.time()
+            -
+            start_time_v3
+        ) / 60
+
+
+        print(
+            f"V3 Block "
+            f"{block_number}/{total_blocks_v3} completed"
+            f" | elapsed = {elapsed_min:.2f} min"
+        )
+# ============================================================
+# 4. 建立block_representatives_v3
+# ============================================================
+
+block_representatives_v3 = (
+    pd.DataFrame(
+        block_results_v3
+    )
+)
+
+
+print(
+    "Number of V3 Block results =",
+    len(
+        block_representatives_v3
+    )
+)
+
+
+print(
+    "\nStatus distribution:"
+)
+
+print(
+    block_representatives_v3[
+        "status"
+    ]
+    .value_counts(
+        dropna=False
+    )
+)
+# ============================================================
+# 5. 確認frequency與resolution_length都有建立
+# ============================================================
+
+print(
+    block_representatives_v3.columns.tolist()
+)
+
+
+print(
+    block_representatives_v3[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb",
+            "frequency",
+            "resolution_length",
+            "haplotype"
+        ]
+    ].head(20)
+)
+# ============================================================
+# 5. 確認frequency與resolution_length都有建立
+# ============================================================
+
+print(
+    block_representatives_v3.columns.tolist()
+)
+
+
+print(
+    block_representatives_v3[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb",
+            "frequency",
+            "resolution_length",
+            "haplotype"
+        ]
+    ].head(20)
+)
+# ============================================================
+# Segment candidate ranking rule
+# ============================================================
+
+segment_candidates = (
+    block_representatives_v3[
+        block_representatives_v3[
+            "status"
+        ] == "representative_found"
+    ]
+    .copy()
+)
+
+
+segment_candidates = (
+    segment_candidates
+    .sort_values(
+
+        by=[
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+
+            #第一順位：
+            #frequency大 → 小
+            "frequency",
+
+            #第二順位：
+            #length小 → 大
+            "resolution_length"
+        ],
+
+        ascending=[
+            True,
+            True,
+            False,
+            True
+        ]
+    )
+)
+segment_representatives_v3 = (
+    segment_candidates
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        as_index=False,
+        sort=False
+    )
+    .first()
+)
+# ============================================================
+# Step 8：檢查V3的2840個Block結果
+# ============================================================
+#
+# 目的：
+#
+# 查看新的規則：
+#
+# length=2
+# → 若最高freq有多個candidate並列
+# → length+1
+# → 持續直到找到unique max
+#
+# 實際讓各Block最後停在哪個length。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 確認總Block數
+# ------------------------------------------------------------
+
+print(
+    "Number of V3 Block results =",
+    len(block_representatives_v3)
+)
+
+
+# ------------------------------------------------------------
+# 2. 查看status
+#
+# 理想：
+#
+# representative_found = 大多數
+#
+# less_than_2_snps
+# = 原本只有1顆SNP的Block
+#
+# unresolved_tie
+# = 一直加到整個Block長度仍然無法分出唯一candidate
+# ------------------------------------------------------------
+
+print(
+    "\nStatus distribution:"
+)
+
+print(
+    block_representatives_v3[
+        "status"
+    ]
+    .value_counts(
+        dropna=False
+    )
+)
+# ============================================================
+# 3. 只抓成功找到representative的Blocks
+# ============================================================
+
+valid_blocks_v3 = (
+    block_representatives_v3[
+        block_representatives_v3[
+            "status"
+        ]
+        ==
+        "representative_found"
+    ]
+    .copy()
+)
+
+
+print(
+    "\nValid representative Blocks =",
+    len(valid_blocks_v3)
+)
+# ============================================================
+# 4. 看每個Block最後在哪個haplotype length被決定
+# ============================================================
+
+print(
+    "\nResolution length distribution:"
+)
+
+print(
+    valid_blocks_v3[
+        "resolution_length"
+    ]
+    .value_counts()
+    .sort_index()
+)
+# ============================================================
+# 5. 看新版Block representative frequency分布
+# ============================================================
+
+print(
+    "\nFrequency summary:"
+)
+
+print(
+    valid_blocks_v3[
+        "frequency"
+    ]
+    .describe()
+)
+
+
+print(
+    "\nSupport_n distribution:"
+)
+
+print(
+    valid_blocks_v3[
+        "support_n"
+    ]
+    .value_counts()
+    .sort_index(
+        ascending=False
+    )
+)
+# ============================================================
+# 6. 檢查新版仍停在
+#    length=2 + support=149 的Block有多少
+# ============================================================
+
+n_len2_support149_v3 = (
+    (
+        valid_blocks_v3[
+            "resolution_length"
+        ] == 2
+    )
+    &
+    (
+        valid_blocks_v3[
+            "support_n"
+        ] == 149
+    )
+).sum()
+
+
+print(
+    "\nBlocks with length=2 and support=149 =",
+    n_len2_support149_v3
+)
+
+
+print(
+    "Proportion =",
+    n_len2_support149_v3
+    /
+    len(valid_blocks_v3)
+)
+
+#每個 Segment
+#第一順位：frequency 最大
+#如果多個 Blocks frequency 相同：
+#第二順位：
+#resolution_length 最小
+#如果 frequency + length 都還完全相同：
+#先保留為 tie
+#不自己新增第三個規則
+
+# ============================================================
+# Step 9：從Block representative選Segment representative
+# ============================================================
+#
+# Segment ranking rule：
+#
+# 第一順位：
+# frequency 大 → 小
+#
+# 第二順位：
+# frequency相同
+# → resolution_length 小 → 大
+#
+#
+# 如果freq與length都一樣：
+# 目前老師沒有定義第三順位，
+# 所以先保留所有並列candidate，
+# 不任意選一個。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 只使用成功找到Block representative的結果
+# ------------------------------------------------------------
+
+segment_candidate_blocks = (
+    block_representatives_v3[
+        block_representatives_v3[
+            "status"
+        ]
+        ==
+        "representative_found"
+    ]
+    .copy()
+)
+
+
+print(
+    "Usable Blocks for Segment selection =",
+    len(segment_candidate_blocks)
+)
+# ============================================================
+# 2. 每個Segment先選最高frequency
+# ============================================================
+
+segment_max_freq = (
+    segment_candidate_blocks
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ]
+    )[
+        "frequency"
+    ]
+    .transform(
+        "max"
+    )
+)
+
+
+#只留下達到Segment最高frequency的Blocks
+segment_top_freq_blocks = (
+    segment_candidate_blocks[
+        np.isclose(
+            segment_candidate_blocks[
+                "frequency"
+            ],
+            segment_max_freq
+        )
+    ]
+    .copy()
+)
+
+
+print(
+    "Blocks remaining after frequency criterion =",
+    len(segment_top_freq_blocks)
+)
+# ============================================================
+# 3. frequency相同時
+#    選resolution_length最小者
+# ============================================================
+
+segment_min_length = (
+    segment_top_freq_blocks
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ]
+    )[
+        "resolution_length"
+    ]
+    .transform(
+        "min"
+    )
+)
+
+
+segment_representative_candidates = (
+    segment_top_freq_blocks[
+        segment_top_freq_blocks[
+            "resolution_length"
+        ]
+        ==
+        segment_min_length
+    ]
+    .copy()
+)
+# ============================================================
+# 4. QC：看frequency + length後
+#    每個Segment還剩幾個candidate
+# ============================================================
+
+segment_candidate_count = (
+    segment_representative_candidates
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ]
+    )
+    .size()
+    .reset_index(
+        name="candidate_n"
+    )
+)
+
+
+print(
+    "Number of Segments with representative candidate =",
+    len(segment_candidate_count)
+)
+
+
+print(
+    "\nNumber of remaining candidates per Segment:"
+)
+
+print(
+    segment_candidate_count[
+        "candidate_n"
+    ]
+    .value_counts()
+    .sort_index()
+)
+
+#利用這個方法做到segment找出對應最高的freq時：25/44成功 剩下的是每個segment有多個相同freq 且第二順位length也相同
+# ============================================================
+# Step 10：抓出Segment層級仍然存在tie的candidate
+# ============================================================
+#
+# 目前Segment選擇規則：
+#
+# 第一順位：
+# frequency 大 → 小
+#
+# 第二順位：
+# frequency相同
+# → resolution_length 小 → 大
+#
+#
+# 經過兩層後：
+#
+# 25個Segment已經唯一決定
+# 19個Segment仍然有>=2個candidate
+#
+# 現在先把這19個Segment完整抓出來，
+# 不新增第三個selection rule。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 找出candidate_n > 1的Segment
+# ------------------------------------------------------------
+
+tied_segment_keys = (
+    segment_candidate_count[
+        segment_candidate_count[
+            "candidate_n"
+        ] > 1
+    ][
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "candidate_n"
+        ]
+    ]
+    .copy()
+)
+
+
+print(
+    "Number of tied Segments =",
+    len(tied_segment_keys)
+)
+
+
+print(
+    tied_segment_keys.to_string(
+        index=False
+    )
+)
+# ============================================================
+# 2. 抓出19個tied Segments中的所有candidate Blocks
+# ============================================================
+
+tied_segment_candidates = (
+    segment_representative_candidates
+    .merge(
+        tied_segment_keys,
+        on=[
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        how="inner"
+    )
+    .sort_values(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "frequency",
+            "resolution_length",
+            "block_id_in_segment_seg1mb"
+        ],
+        ascending=[
+            True,
+            True,
+            False,
+            True,
+            True
+        ]
+    )
+)
+
+
+print(
+    tied_segment_candidates[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "candidate_n",
+            "block_id_in_segment_seg1mb",
+            "frequency",
+            "resolution_length",
+            "haplotype",
+            "support_n",
+            "start_snp",
+            "end_snp"
+        ]
+    ].to_string(
+        index=False
+    )
+)
+# ============================================================
+# Step 2-1：建立Segment arrangement table
+# ============================================================
+#
+# 目的：
+#
+# 每個Segment建立一列：
+#
+# Chr
+# Segment ID
+# representative frequency
+# Segment SNP數
+# 原始genomic order
+#
+# 接著依：
+#
+# 1. frequency 大 → 小
+# 2. Segment SNP數 小 → 大
+#
+# 排出新的Segment order。
+#
+#
+# 注意：
+# 目前只是重新排列Segment，
+# Segment內SNP順序完全不改。
+# ============================================================
+
+
+import pandas as pd
+import numpy as np
+# ------------------------------------------------------------
+# 1. 從原本metadata建立45個Segment summary
+# ------------------------------------------------------------
+
+segment_metadata = (
+    block_metadata
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        as_index=False
+    )
+    .agg(
+
+        #這個Segment總共有多少SNP
+        segment_snp_n=(
+            "variant_id",
+            "size"
+        ),
+
+        #Segment最前面的physical position
+        segment_start=(
+            "Start_num_v9",
+            "min"
+        ),
+
+        #Segment最後面的physical position
+        segment_end=(
+            "Start_num_v9",
+            "max"
+        )
+    )
+)
+
+
+print(
+    "Number of Segments =",
+    len(segment_metadata)
+)
+# ============================================================
+# 補建立 segment_summary_v3
+# ============================================================
+#
+# 目前 segment_representative_candidates
+# 已經完成Segment層級的篩選：
+#
+# 1. frequency最大
+# 2. frequency相同 → resolution_length較小
+#
+# 有些Segment仍然有多個Block並列，
+# 但這些並列Block的：
+#
+# frequency
+# resolution_length
+#
+# 都完全相同。
+#
+# 因此現在每個Segment只需要保留一組：
+#
+# Chr
+# Segment
+# frequency
+# resolution_length
+# ============================================================
+
+segment_summary_v3 = (
+    segment_representative_candidates[
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "frequency",
+            "resolution_length"
+        ]
+    ]
+    .drop_duplicates()
+    .reset_index(drop=True)
+)
+
+
+# ------------------------------------------------------------
+# QC
+# ------------------------------------------------------------
+
+print(
+    "Number of Segment summaries =",
+    len(segment_summary_v3)
+)
+
+
+print(
+    segment_summary_v3.head(10)
+)
+# ============================================================
+# 2. 加入Segment representative frequency
+# ============================================================
+#
+# 使用left join，
+# 因為45個Segment全部都必須保留。
+#
+# 那個沒有>=2 SNP haplotype的Segment
+# frequency會保持NA。
+# ============================================================
+
+segment_arrangement = (
+    segment_metadata
+    .merge(
+        segment_summary_v3[
+            [
+                "Chr_id",
+                "segment_id_chr_seg1mb",
+                "frequency",
+                "resolution_length"
+            ]
+        ],
+        on=[
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        how="left"
+    )
+)
+# ============================================================
+# 3. 建立原始chromosome order
+# ============================================================
+#
+# 這只用在最後完全tie時，
+# 確保每次排序結果一致。
+# ============================================================
+
+chr_order_map = {
+    str(i): i
+    for i in range(1, 23)
+}
+
+chr_order_map["X"] = 23
+chr_order_map["MT"] = 24
+
+
+segment_arrangement[
+    "original_chr_order"
+] = (
+    segment_arrangement[
+        "Chr_id"
+    ]
+    .astype(str)
+    .map(
+        chr_order_map
+    )
+)
+# ============================================================
+# 4. Segment重新排序
+# ============================================================
+#
+# 第一順位：
+# frequency 大 → 小
+#
+# 第二順位：
+# Segment SNP數 小 → 大
+#
+# 第三順位只作stable tie-break：
+# 原始Chr順序 → 原始Segment順序
+#
+# frequency=NA自動放最後。
+# ============================================================
+
+segment_arrangement = (
+    segment_arrangement
+    .sort_values(
+        by=[
+            "frequency",
+            "segment_snp_n",
+            "original_chr_order",
+            "segment_id_chr_seg1mb"
+        ],
+        ascending=[
+            False,   #freq大到小
+            True,    #Segment SNP數小到大
+            True,    #原始Chr順序
+            True     #原始Segment順序
+        ],
+        na_position="last"
+    )
+    .reset_index(
+        drop=True
+    )
+)
+# ============================================================
+# 5. 建立新的Segment排列編號
+# ============================================================
+
+segment_arrangement[
+    "new_segment_order"
+] = (
+    np.arange(
+        1,
+        len(segment_arrangement) + 1
+    )
+)
+
+# ============================================================
+# 6. 查看45個Segment的新排列
+# ============================================================
+
+print(
+    segment_arrangement[
+        [
+            "new_segment_order",
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "frequency",
+            "segment_snp_n",
+            "segment_start",
+            "segment_end"
+        ]
+    ].to_string(
+        index=False
+    )
+)
+
+# ============================================================
+# Step 2-2：建立45個Segment的正式排列順序
+# ============================================================
+#
+# 排列規則：
+#
+# 第一順位：
+# representative frequency 大 → 小
+#
+# 第二順位：
+# frequency相同
+# → Segment SNP數 小 → 大
+#
+# 第三順位：
+# 如果frequency與SNP數都一樣，
+# 使用原始Chr / Segment順序固定結果。
+#
+# 沒有frequency的Segment放最後。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 將44個有frequency的Segment資訊
+#    接回完整45個Segment metadata
+# ------------------------------------------------------------
+
+segment_arrangement = (
+    segment_metadata
+    .merge(
+        segment_summary_v3[
+            [
+                "Chr_id",
+                "segment_id_chr_seg1mb",
+                "frequency",
+                "resolution_length"
+            ]
+        ],
+        on=[
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+        how="left"
+    )
+)
+
+# ============================================================
+# 2. 建立原始chromosome順序
+# ============================================================
+
+chr_order_map = {
+    str(i): i
+    for i in range(1, 23)
+}
+
+chr_order_map["X"] = 23
+chr_order_map["MT"] = 24
+
+
+segment_arrangement[
+    "original_chr_order"
+] = (
+    segment_arrangement[
+        "Chr_id"
+    ]
+    .astype(str)
+    .map(chr_order_map)
+)
+
+# ============================================================
+# 3. Segment重新排列
+# ============================================================
+
+segment_arrangement = (
+    segment_arrangement
+    .sort_values(
+        by=[
+            "frequency",
+            "segment_snp_n",
+            "original_chr_order",
+            "segment_id_chr_seg1mb"
+        ],
+
+        ascending=[
+            False,   #frequency大 → 小
+            True,    #Segment SNP數小 → 大
+            True,    #原始Chr順序
+            True     #原始Segment順序
+        ],
+
+        #沒有frequency的Segment放最後
+        na_position="last"
+    )
+    .reset_index(drop=True)
+)
+
+# ============================================================
+# 4. 新的Segment order
+# ============================================================
+
+segment_arrangement[
+    "new_segment_order"
+] = np.arange(
+    1,
+    len(segment_arrangement) + 1
+)
+
+# ============================================================
+# 5. QC：查看45個Segment排序
+# ============================================================
+
+print(
+    "Number of arranged Segments =",
+    len(segment_arrangement)
+)
+
+
+print(
+    segment_arrangement[
+        [
+            "new_segment_order",
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "frequency",
+            "segment_snp_n",
+            "resolution_length"
+        ]
+    ].to_string(index=False)
+)
+
+# ============================================================
+# Step 2-3：將Segment新順序映射回517,846顆SNP
+# ============================================================
+#
+# 例如原本：
+#
+# Segment A：
+# SNP1 SNP2 SNP3
+#
+# Segment B：
+# SNP4 SNP5
+#
+#
+# 排序後如果B在A前面：
+#
+# SNP4 SNP5 | SNP1 SNP2 SNP3
+#
+#
+# Segment內部SNP順序不變。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 把new_segment_order接到每一顆SNP
+# ------------------------------------------------------------
+
+snp_arrangement = (
+    block_metadata
+    .merge(
+        segment_arrangement[
+            [
+                "Chr_id",
+                "segment_id_chr_seg1mb",
+                "new_segment_order",
+                "frequency",
+                "segment_snp_n"
+            ]
+        ],
+
+        on=[
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ],
+
+        how="left"
+    )
+)
+
+# ============================================================
+# 2. SNP正式重新排序
+# ============================================================
+#
+# 第一層：
+# new_segment_order
+#
+# 第二層：
+# Segment內physical position
+#
+# 第三層：
+# 如果同一位置有多個probe，
+# 使用true_pgen_index固定順序。
+# ============================================================
+
+snp_arrangement = (
+    snp_arrangement
+    .sort_values(
+        by=[
+            "new_segment_order",
+            "Start_num_v9",
+            "true_pgen_index"
+        ],
+
+        ascending=[
+            True,
+            True,
+            True
+        ]
+    )
+    .reset_index(drop=True)
+)
+
+# ============================================================
+# 4. QC：SNP數量
+# ============================================================
+
+print(
+    "Total SNPs after arrangement =",
+    len(snp_arrangement)
+)
+
+print(
+    "Missing new_segment_order =",
+    snp_arrangement[
+        "new_segment_order"
+    ].isna().sum()
+)
+
+print(
+    "Unique new_snp_order =",
+    snp_arrangement[
+        "new_snp_order"
+    ].nunique()
+)
+# ============================================================
+# 5. QC：確認每個Segment內physical position仍然遞增
+# ============================================================
+
+segment_position_check = (
+    snp_arrangement
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ]
+    )[
+        "Start_num_v9"
+    ]
+    .apply(
+        lambda x:
+        x.is_monotonic_increasing
+    )
+)
+
+
+print(
+    "All Segments keep physical SNP order =",
+    segment_position_check.all()
+)
+
+#517,846 SNP
+#↓
+#最小可容納正方形 = 720 × 720
+#capacity = 518,400
+#padding = 554 cells
+
+#new_snp_order = 1
+#從中心開始→ 向右→ 向下→ 向左→ 向上→ 一圈一圈往中心
+#clockwise inward spiral
+
+# ============================================================
+# Step 2-5：建立從中心出發的 spiral 座標
+# ============================================================
+#
+# 目標：
+# 將已經排好 new_snp_order 的 SNP，
+# 放進一個 720 x 720 的 square matrix 中。
+#
+# 這次不是從左上角開始，
+# 而是改成從中心開始，方向依序：
+#
+# 右 -> 下 -> 左 -> 上
+#
+# 然後一圈一圈向外擴張。
+#
+# 注意：
+# 720 是偶數，所以沒有單一中心點，
+# 中央其實有 4 個格子。
+#
+# 這裡固定使用「中央四格中的左上角」作為起點：
+# Python 0-based index = (359, 359)
+#
+# 若之後你想改成中央四格中的其他一格，
+# 只要改 start_row / start_col 即可。
+# ============================================================
+
+import math
+import numpy as np
+import pandas as pd
+# ------------------------------------------------------------
+# 1. SNP總數
+# ------------------------------------------------------------
+
+n_snps_spiral = len(
+    snp_arrangement
+)
+
+# ------------------------------------------------------------
+# 2. 計算最小可容納的 square size
+# ------------------------------------------------------------
+
+spiral_size = math.ceil(
+    math.sqrt(
+        n_snps_spiral
+    )
+)
+
+spiral_capacity = (
+    spiral_size
+    *
+    spiral_size
+)
+
+spiral_padding_n = (
+    spiral_capacity
+    -
+    n_snps_spiral
+)
+
+print(
+    "Number of SNPs =",
+    n_snps_spiral
+)
+
+print(
+    "Spiral matrix size =",
+    spiral_size,
+    "x",
+    spiral_size
+)
+
+print(
+    "Capacity =",
+    spiral_capacity
+)
+
+print(
+    "Padding cells =",
+    spiral_padding_n
+)
+
+# ============================================================
+# 3. 建立從中心出發的 spiral 座標函數
+# ============================================================
+#
+# 規則：
+# 起點 = 中心（偶數邊長時取中央四格中的左上角）
+#
+# 方向順序：
+# 右 1 步
+# 下 1 步
+# 左 2 步
+# 上 2 步
+# 右 3 步
+# 下 3 步
+# 左 4 步
+# 上 4 步
+# ...
+#
+# 也就是每兩個方向，步數 +1。
+#
+# 函數回傳：
+# coordinates = [(row0, col0), (row1, col1), ...]
+#
+# 只保留落在矩陣範圍內的座標。
+# ============================================================
+
+def generate_center_out_spiral_coordinates(
+    n_rows,
+    n_cols
+):
+
+    coordinates = []
+
+    # --------------------------------------------------------
+    # 偶數矩陣時，取中央四格中的左上角作為起點
+    # 例如 720 x 720 時：
+    # row = 359, col = 359
+    # --------------------------------------------------------
+    start_row = (n_rows // 2) - 1
+    start_col = (n_cols // 2) - 1
+
+    # 先把起點放進去
+    row_now = start_row
+    col_now = start_col
+
+    if (
+        0 <= row_now < n_rows
+        and
+        0 <= col_now < n_cols
+    ):
+        coordinates.append(
+            (row_now, col_now)
+        )
+
+    # --------------------------------------------------------
+    # 定義方向：
+    # 右、下、左、上
+    # --------------------------------------------------------
+    directions = [
+        (0, 1),    # right
+        (1, 0),    # down
+        (0, -1),   # left
+        (-1, 0)    # up
+    ]
+
+    # 每兩個方向步數增加1
+    step_length = 1
+
+    # direction_index 依序對應：
+    # 0=右, 1=下, 2=左, 3=上
+    direction_index = 0
+
+    # --------------------------------------------------------
+    # 持續展開，直到收集滿整個矩陣所需座標數
+    # --------------------------------------------------------
+    while len(coordinates) < (n_rows * n_cols):
+
+        # 每個 step_length 會用兩次
+        for _ in range(2):
+
+            dr, dc = directions[direction_index % 4]
+
+            for _ in range(step_length):
+
+                row_now += dr
+                col_now += dc
+
+                if (
+                    0 <= row_now < n_rows
+                    and
+                    0 <= col_now < n_cols
+                ):
+                    coordinates.append(
+                        (row_now, col_now)
+                    )
+
+                    # 如果已經收滿，就直接回傳
+                    if len(coordinates) == (n_rows * n_cols):
+                        return coordinates
+
+            direction_index += 1
+
+        # 每走完兩個方向，步長加1
+        step_length += 1
+
+    return coordinates
+
+
+# ------------------------------------------------------------
+# 4. 產生 720*720spiral 座標
+# ------------------------------------------------------------
+
+spiral_coords = generate_center_out_spiral_coordinates(
+    spiral_size,
+    spiral_size
+)
+
+print(
+    "Total coordinates generated =",
+    len(spiral_coords)
+)
+
+print(
+    "First 10 coordinates ="
+)
+
+print(
+    spiral_coords[:10]
+)
+
+# ============================================================
+# 5. 把 SNP 順序對應到 spiral 座標
+# ============================================================
+#
+# snp_arrangement 已經依照：
+# 1. representative frequency 大到小
+# 2. 同freq時 segment長度小到大
+# 3. segment內原本SNP順序
+#
+# 排好。
+#
+# 現在只要依照這個排序，
+# 把第1顆SNP放到 spiral 第1個座標，
+# 第2顆SNP放到 spiral 第2個座標，
+# ...
+# 即可。
+# ============================================================
+
+snp_arrangement = (
+    snp_arrangement
+    .copy()
+    .reset_index(drop=True)
+)
+
+# 只取前 n_snps_spiral 個座標給 SNP 用
+used_coords = spiral_coords[:n_snps_spiral]
+
+snp_arrangement["spiral_row_py"] = [
+    coord[0]
+    for coord in used_coords
+]
+
+snp_arrangement["spiral_col_py"] = [
+    coord[1]
+    for coord in used_coords
+]
+
+# 轉成 1-based，之後若要回 R 或輸出更直觀
+snp_arrangement["spiral_row"] = (
+    snp_arrangement["spiral_row_py"] + 1
+)
+
+snp_arrangement["spiral_col"] = (
+    snp_arrangement["spiral_col_py"] + 1
+)
+
+# ------------------------------------------------------------
+# 6. 基本檢查
+# ------------------------------------------------------------
+
+print(
+    "SNP rows =",
+    len(snp_arrangement)
+)
+
+print(
+    "Unique spiral coordinates =",
+    snp_arrangement[
+        ["spiral_row", "spiral_col"]
+    ]
+    .drop_duplicates()
+    .shape[0]
+)
+
+print(
+    "Row min / max =",
+    snp_arrangement["spiral_row"].min(),
+    "/",
+    snp_arrangement["spiral_row"].max()
+)
+
+print(
+    "Col min / max =",
+    snp_arrangement["spiral_col"].min(),
+    "/",
+    snp_arrangement["spiral_col"].max()
+)
+
+print(
+    snp_arrangement[
+        [
+            "new_snp_order",
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "variant_id",
+            "spiral_row",
+            "spiral_col"
+        ]
+    ].head(10)
+)
+
+# ============================================================
+# Step 2-6：建立最終 SNP → Spiral pixel mapping
+# ============================================================
+#
+# 目的：
+#
+# 將目前已經完成的：
+#
+# Segment frequency排序
+# → Segment重新排列
+# → Segment內維持physical position
+# → center-out spiral
+#
+# 整理成一份固定mapping。
+#
+#
+# 之後150個subjects：
+#
+# 同一顆variant
+# 永遠放在完全相同的spiral pixel。
+#
+# 每個人的差異只會來自genotype / coloring，
+# 不會來自SNP位置不同。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 建立正式mapping table
+# ------------------------------------------------------------
+
+spiral_snp_mapping = (
+    snp_arrangement[
+        [
+            #原始genomic資訊
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "block_id_in_segment_seg1mb",
+
+            #Segment重新排列後的順序
+            "new_segment_order",
+
+            #這個Segment的代表frequency
+            "frequency",
+
+            #Segment總SNP數
+            "segment_snp_n",
+
+            #SNP資訊
+            "variant_id",
+            "Start_num_v9",
+            "REF",
+            "ALT",
+
+            #真正對應PGEN的index
+            "true_pgen_index",
+
+            #重新排列後的全域SNP順序
+            "new_snp_order",
+
+            #Python 0-based spiral座標
+            "spiral_row_py",
+            "spiral_col_py",
+
+            #1-based spiral座標
+            "spiral_row",
+            "spiral_col"
+        ]
+    ]
+    .copy()
+)
+
+# ============================================================
+# 2. Final mapping QC
+# ============================================================
+
+print(
+    "Total SNPs =",
+    len(spiral_snp_mapping)
+)
+
+
+# ------------------------------------------------------------
+# 每顆SNP只能有一個new_snp_order
+# ------------------------------------------------------------
+
+print(
+    "Unique new_snp_order =",
+    spiral_snp_mapping[
+        "new_snp_order"
+    ].nunique()
+)
+
+
+# ------------------------------------------------------------
+# 每顆SNP只能佔一個spiral pixel
+# ------------------------------------------------------------
+
+print(
+    "Unique spiral pixels =",
+    spiral_snp_mapping[
+        [
+            "spiral_row_py",
+            "spiral_col_py"
+        ]
+    ]
+    .drop_duplicates()
+    .shape[0]
+)
+
+
+# ------------------------------------------------------------
+# 檢查variant ID是否仍然完整
+# ------------------------------------------------------------
+
+print(
+    "Unique variant IDs =",
+    spiral_snp_mapping[
+        "variant_id"
+    ].nunique()
+)
+
+
+# ------------------------------------------------------------
+# 檢查座標範圍
+# ------------------------------------------------------------
+
+print(
+    "Spiral row range =",
+    spiral_snp_mapping[
+        "spiral_row_py"
+    ].min(),
+    "to",
+    spiral_snp_mapping[
+        "spiral_row_py"
+    ].max()
+)
+
+print(
+    "Spiral col range =",
+    spiral_snp_mapping[
+        "spiral_col_py"
+    ].min(),
+    "to",
+    spiral_snp_mapping[
+        "spiral_col_py"
+    ].max()
+)
+
+# ============================================================
+# 3. 確認每個Segment在new_snp_order中仍然連續
+# ============================================================
+#
+# 如果一個Segment有N顆SNP：
+#
+# max(new_snp_order)
+# - min(new_snp_order)
+# + 1
+#
+# 應該剛好 = N
+#
+# 代表Segment內沒有被其他Segment插入。
+# ============================================================
+
+segment_continuity_check = (
+    spiral_snp_mapping
+    .groupby(
+        [
+            "Chr_id",
+            "segment_id_chr_seg1mb"
+        ]
+    )
+    .agg(
+        SNP_n=(
+            "variant_id",
+            "size"
+        ),
+
+        order_min=(
+            "new_snp_order",
+            "min"
+        ),
+
+        order_max=(
+            "new_snp_order",
+            "max"
+        )
+    )
+    .reset_index()
+)
+
+
+segment_continuity_check[
+    "is_continuous"
+] = (
+    segment_continuity_check[
+        "order_max"
+    ]
+    -
+    segment_continuity_check[
+        "order_min"
+    ]
+    +
+    1
+    ==
+    segment_continuity_check[
+        "SNP_n"
+    ]
+)
+
+
+print(
+    "All 45 Segments remain continuous =",
+    segment_continuity_check[
+        "is_continuous"
+    ].all()
+)
+
+# ============================================================
+# 4. 保存正式Spiral SNP mapping
+# ============================================================
+
+from pathlib import Path
+
+
+output_dir = Path(
+    "/Users/sheenazhengmei/Desktop/"
+    "segment_haplotype_step2"
+)
+
+
+spiral_mapping_path = (
+    output_dir
+    /
+    "SNP_segment_frequency_centerout_spiral_mapping_517846.csv"
+)
+
+
+spiral_snp_mapping.to_csv(
+    spiral_mapping_path,
+    index=False
+)
+
+
+print(
+    "Saved mapping to =",
+    spiral_mapping_path
+)
+
+# ============================================================
+# Step 3-1：建立 genotype encoding 規則
+# 目的：
+# 1. 固定這一版的 genotype -> code -> RGB 邏輯
+# 2. 後面不論哪一個 sample，都用同一套規則
+# 3. 這一步先不畫圖，只先準備好 lookup tables
+# ============================================================
+
+import pandas as pd
+import numpy as np
+
+# ------------------------------------------------------------
+# 1) 建立 genotype category -> numeric code
+# 說明：
+# 這裡的 genotype 是「unordered nucleotide genotype」
+# 例如：
+# AG 和 GA 視為同一類
+# CT 和 TC 視為同一類
+# ------------------------------------------------------------
+genotype_to_code = {
+    "AA": 1,
+    "TT": 1,
+    "CC": 2,
+    "GG": 2,
+    "AG": 3,
+    "GA": 3,
+    "CT": 3,
+    "TC": 3,
+    "AC": 4,
+    "CA": 4,
+    "GT": 4,
+    "TG": 4,
+    "AT": 5,
+    "TA": 5,
+    "CG": 6,
+    "GC": 6,
+    "NoCall": 7
+}
+
+# ------------------------------------------------------------
+# 2) 建立 numeric code -> RGB
+# 說明：
+# 後面每個 pixel 會先得到 code，
+# 再透過這個表轉成 RGB 顏色
+# ------------------------------------------------------------
+code_to_rgb = {
+    0: (255, 255, 255),   # Padding = white
+    1: (255, 0, 0),       # AA / TT = red
+    2: (0, 0, 255),       # CC / GG = blue
+    3: (160, 32, 240),    # AG / CT = purple
+    4: (0, 255, 0),       # AC / GT = green
+    5: (255, 165, 0),     # AT = orange
+    6: (165, 42, 42),     # CG = brown
+    7: (211, 211, 211)    # NoCall = lightgrey
+}
+
+# ------------------------------------------------------------
+# 3) 整理成 table，方便檢查
+# ------------------------------------------------------------
+encoding_table = pd.DataFrame({
+    "code": [0, 1, 2, 3, 4, 5, 6, 7],
+    "meaning": [
+        "Padding",
+        "AA / TT",
+        "CC / GG",
+        "AG / CT",
+        "AC / GT",
+        "AT",
+        "CG",
+        "NoCall"
+    ],
+    "rgb": [
+        code_to_rgb[0],
+        code_to_rgb[1],
+        code_to_rgb[2],
+        code_to_rgb[3],
+        code_to_rgb[4],
+        code_to_rgb[5],
+        code_to_rgb[6],
+        code_to_rgb[7]
+    ]
+})
+
+print(encoding_table)
+
+# ------------------------------------------------------------
+# 4) 建立一個小工具函數：
+#    把兩個 allele 組成 unordered genotype
+#
+# 例子：
+# ("A","G") -> "AG"
+# ("G","A") -> "AG"
+# ("T","T") -> "TT"
+#
+# 若其中有缺失，回傳 "NoCall"
+# ------------------------------------------------------------
+def make_unordered_genotype(allele1, allele2):
+    """
+    將兩個 allele 組成不分順序的 nucleotide genotype。
+    若其中任一個缺失，回傳 'NoCall'。
+    """
+    if pd.isna(allele1) or pd.isna(allele2):
+        return "NoCall"
+    
+    allele1 = str(allele1).upper()
+    allele2 = str(allele2).upper()
+    
+    valid_bases = {"A", "C", "G", "T"}
+    
+    if allele1 not in valid_bases or allele2 not in valid_bases:
+        return "NoCall"
+    
+    return "".join(sorted([allele1, allele2]))
+
+# ------------------------------------------------------------
+# 5) 測試這個函數有沒有正常
+# ------------------------------------------------------------
+test_examples = [
+    ("A", "A"),
+    ("T", "T"),
+    ("A", "G"),
+    ("G", "A"),
+    ("C", "T"),
+    ("T", "C"),
+    ("A", "C"),
+    ("G", "T"),
+    ("A", "T"),
+    ("C", "G"),
+    (np.nan, "A")
+]
+
+test_df = pd.DataFrame(test_examples, columns=["allele1", "allele2"])
+test_df["genotype"] = test_df.apply(
+    lambda x: make_unordered_genotype(x["allele1"], x["allele2"]),
+    axis=1
+)
+test_df["code"] = test_df["genotype"].map(genotype_to_code)
+
+print("\nTest conversion:")
+print(test_df)
+
+# ============================================================
+# Step 3-2：單一subject的517,846 SNP轉成Encoding Code
+# ============================================================
+#
+# 目前已經有：
+#
+# pgen_reader
+# spiral_snp_mapping
+# genotype_to_code
+#
+#
+# PGEN hardcall：
+#
+# 0 = REF/REF
+# 1 = REF/ALT
+# 2 = ALT/ALT
+# 其他 = NoCall
+#
+#
+# 然後再按照我們固定的Encoding：
+#
+# 1 = AA / TT
+# 2 = CC / GG
+# 3 = AG / CT
+# 4 = AC / GT
+# 5 = AT
+# 6 = CG
+# 7 = NoCall
+#
+#
+# 這一步先測：
+# pgen sample index = 0
+# ============================================================
+
+import numpy as np
+import pandas as pd
+
+# ------------------------------------------------------------
+# 1. 將PGEN genotype code轉成nucleotide genotype
+# ------------------------------------------------------------
+
+def pgen_code_to_nucleotide(
+    pgen_code,
+    ref,
+    alt
+):
+    """
+    PGEN hardcall:
+        0 -> REF/REF
+        1 -> REF/ALT
+        2 -> ALT/ALT
+        其他 -> NoCall
+
+    最後將allele排序，
+    例如：
+        G/A -> AG
+        T/C -> CT
+    """
+
+    ref = str(ref).upper()
+    alt = str(alt).upper()
+
+    valid_bases = {
+        "A",
+        "C",
+        "G",
+        "T"
+    }
+
+    #REF或ALT不是單一ACGT時視為NoCall
+    if (
+        ref not in valid_bases
+        or
+        alt not in valid_bases
+    ):
+        return "NoCall"
+
+    #REF / REF
+    if pgen_code == 0:
+
+        return "".join(
+            sorted(
+                [ref, ref]
+            )
+        )
+
+    #REF / ALT
+    elif pgen_code == 1:
+
+        return "".join(
+            sorted(
+                [ref, alt]
+            )
+        )
+
+    #ALT / ALT
+    elif pgen_code == 2:
+
+        return "".join(
+            sorted(
+                [alt, alt]
+            )
+        )
+
+    #missing / NoCall
+    else:
+
+        return "NoCall"
+
+# ============================================================
+# 2. 指定測試subject
+# ============================================================
+#
+# Python是0-based：
+#
+# sample_index = 0
+# = .pgen中的第1個subject
+# ============================================================
+
+test_sample_index = 0
+
+# ============================================================
+# 3. 讀取這一位subject的517,846 SNP genotype
+# ============================================================
+
+n_variants = len(
+    spiral_snp_mapping
+)
+
+
+#保存最後的encoding code
+test_sample_codes = np.empty(
+    n_variants,
+    dtype=np.uint8
+)
+
+
+#暫時buffer：
+#每次從.pgen讀一顆SNP的150人genotype
+geno_buffer = np.empty(
+    150,
+    dtype=np.int8
+)
+
+
+for i, row in enumerate(
+    spiral_snp_mapping.itertuples(
+        index=False
+    )
+):
+
+    # --------------------------------------------------------
+    # 這顆SNP真正的PGEN位置
+    # --------------------------------------------------------
+
+    variant_index = int(
+        row.true_pgen_index
+    )
+
+
+    # --------------------------------------------------------
+    # 從PGEN讀這顆SNP的150人genotype
+    # --------------------------------------------------------
+
+    pgen_reader.read(
+        variant_index,
+        geno_buffer
+    )
+
+
+    # --------------------------------------------------------
+    # 只拿目前測試subject的genotype
+    # --------------------------------------------------------
+
+    pgen_code = int(
+        geno_buffer[
+            test_sample_index
+        ]
+    )
+
+
+    # --------------------------------------------------------
+    # PGEN genotype → nucleotide genotype
+    # --------------------------------------------------------
+
+    nucleotide_genotype = (
+        pgen_code_to_nucleotide(
+            pgen_code,
+            row.REF,
+            row.ALT
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # nucleotide genotype → Encoding Code 1–7
+    # --------------------------------------------------------
+
+    encoding_code = (
+        genotype_to_code[
+            nucleotide_genotype
+        ]
+    )
+
+
+    test_sample_codes[i] = (
+        encoding_code
+    )
+
+
+# ============================================================
+# 4. QC：查看單一subject的Encoding Code分布
+# ============================================================
+
+unique_codes, counts = np.unique(
+    test_sample_codes,
+    return_counts=True
+)
+
+
+print(
+    "Number of encoded SNPs =",
+    len(test_sample_codes)
+)
+
+
+print(
+    "\nEncoding distribution:"
+)
+
+
+for code, count in zip(
+    unique_codes,
+    counts
+):
+
+    print(
+        "Code =",
+        code,
+        "| Count =",
+        count
+    )
+
+
+print(
+    "\nTotal =",
+    counts.sum()
+)
+
+# ============================================================
+# Step 3-3：單一subject建立720×720 Spiral Code Matrix
+# ============================================================
+#
+# 目前已經有：
+#
+# test_sample_codes
+#   → 517,846顆SNP的Encoding Code
+#
+# spiral_snp_mapping
+#   → 每顆SNP固定的center-out spiral座標
+#
+#
+# 現在要建立：
+#
+# 720 × 720 numeric matrix
+#
+#
+# Code：
+#
+# 0 = Padding
+# 1 = AA / TT
+# 2 = CC / GG
+# 3 = AG / CT
+# 4 = AC / GT
+# 5 = AT
+# 6 = CG
+# 7 = NoCall
+#
+#
+# 未使用的554個pixel：
+#
+# 保持Code 0
+# ============================================================
+
+import numpy as np
+# ------------------------------------------------------------
+# 1. 建立720×720 matrix
+#
+# 一開始全部填0：
+# 0 = Padding
+# ------------------------------------------------------------
+
+test_sample_code_matrix = np.zeros(
+    (
+        spiral_size,
+        spiral_size
+    ),
+    dtype=np.uint8
+)
+
+
+print(
+    "Initial matrix shape =",
+    test_sample_code_matrix.shape
+)
+
+# ============================================================
+# 2. 取得每顆SNP的Python 0-based spiral座標
+# ============================================================
+#
+# spiral_row_py：
+# 0 ~ 719
+#
+# spiral_col_py：
+# 0 ~ 719
+# ============================================================
+
+spiral_rows = (
+    spiral_snp_mapping[
+        "spiral_row_py"
+    ]
+    .to_numpy(
+        dtype=int
+    )
+)
+
+
+spiral_cols = (
+    spiral_snp_mapping[
+        "spiral_col_py"
+    ]
+    .to_numpy(
+        dtype=int
+    )
+)
+
+
+print(
+    "Number of spiral coordinates =",
+    len(spiral_rows)
+)
+
+# ============================================================
+# 3. 將517,846個Encoding Code放到固定Spiral位置
+# ============================================================
+#
+# 第i顆SNP：
+#
+# test_sample_codes[i]
+#
+# 會放到：
+#
+# spiral_rows[i],
+# spiral_cols[i]
+#
+#
+# 150人之後全部使用相同座標；
+# 不同人的差異只來自genotype code。
+# ============================================================
+
+test_sample_code_matrix[
+    spiral_rows,
+    spiral_cols
+] = (
+    test_sample_codes
+)
+# ============================================================
+# 4. QC：確認720×720 matrix完整
+# ============================================================
+
+print(
+    "Matrix shape =",
+    test_sample_code_matrix.shape
+)
+
+
+print(
+    "Total pixels =",
+    test_sample_code_matrix.size
+)
+
+
+print(
+    "Expected SNP pixels =",
+    len(test_sample_codes)
+)
+
+
+print(
+    "Expected padding pixels =",
+    test_sample_code_matrix.size
+    -
+    len(test_sample_codes)
+)
+
+# ============================================================
+# 5. 查看Spiral matrix中的Code分布
+# ============================================================
+
+matrix_codes, matrix_counts = np.unique(
+    test_sample_code_matrix,
+    return_counts=True
+)
+
+
+print(
+    "\nSpiral matrix encoding distribution:"
+)
+
+
+for code, count in zip(
+    matrix_codes,
+    matrix_counts
+):
+
+    print(
+        "Code =",
+        code,
+        "| Count =",
+        count
+    )
+
+# ============================================================
+# 6. 單獨確認Padding數量
+# ============================================================
+
+padding_count = np.sum(
+    test_sample_code_matrix == 0
+)
+
+
+nonpadding_count = np.sum(
+    test_sample_code_matrix != 0
+)
+
+
+print(
+    "Padding pixels =",
+    padding_count
+)
+
+
+print(
+    "SNP pixels =",
+    nonpadding_count
+)
+
+# ============================================================
+# 7. 確認spiral第一顆SNP的位置
+# ============================================================
+
+first_row = int(
+    spiral_snp_mapping.loc[
+        0,
+        "spiral_row_py"
+    ]
+)
+
+first_col = int(
+    spiral_snp_mapping.loc[
+        0,
+        "spiral_col_py"
+    ]
+)
+
+
+print(
+    "First SNP =",
+    spiral_snp_mapping.loc[
+        0,
+        "variant_id"
+    ]
+)
+
+
+print(
+    "First SNP spiral coordinate =",
+    (
+        first_row,
+        first_col
+    )
+)
+
+
+print(
+    "First SNP encoding code =",
+    test_sample_code_matrix[
+        first_row,
+        first_col
+    ]
+)
+# ============================================================
+# Step 3-4：將720×720 Code Matrix 轉成 RGB Image
+# ============================================================
+#
+# 已有物件：
+# test_sample_code_matrix
+#   -> shape = (720, 720)
+#   -> 裡面是0~7的genotype code
+#
+# 現在要建立：
+# test_sample_rgb_image
+#   -> shape = (720, 720, 3)
+#   -> 每個pixel都轉成對應RGB
+#
+# Code對照：
+# 0 = Padding    = white      = (255, 255, 255)
+# 1 = AA / TT    = red        = (255,   0,   0)
+# 2 = CC / GG    = blue       = (  0,   0, 255)
+# 3 = AG / CT    = purple     = (160,  32, 240)
+# 4 = AC / GT    = green      = (  0, 255,   0)
+# 5 = AT         = orange     = (255, 165,   0)
+# 6 = CG         = brown      = (165,  42,  42)
+# 7 = NoCall     = lightgrey  = (211, 211, 211)
+# ============================================================
+
+import numpy as np
+# ------------------------------------------------------------
+# 1. 建立code -> RGB對照表
+#
+# lookup的第0列代表Code 0
+# lookup的第1列代表Code 1
+# ...
+# lookup的第7列代表Code 7
+# ------------------------------------------------------------
+
+code_to_rgb = np.array(
+    [
+        [255, 255, 255],  # 0 Padding
+        [255,   0,   0],  # 1 AA / TT
+        [  0,   0, 255],  # 2 CC / GG
+        [160,  32, 240],  # 3 AG / CT
+        [  0, 255,   0],  # 4 AC / GT
+        [255, 165,   0],  # 5 AT
+        [165,  42,  42],  # 6 CG
+        [211, 211, 211]   # 7 NoCall
+    ],
+    dtype=np.uint8
+)
+
+print("Lookup table shape =", code_to_rgb.shape)
+# ------------------------------------------------------------
+# 1. 建立code -> RGB對照表
+#
+# lookup的第0列代表Code 0
+# lookup的第1列代表Code 1
+# ...
+# lookup的第7列代表Code 7
+# ------------------------------------------------------------
+
+code_to_rgb = np.array(
+    [
+        [255, 255, 255],  # 0 Padding
+        [255,   0,   0],  # 1 AA / TT
+        [  0,   0, 255],  # 2 CC / GG
+        [160,  32, 240],  # 3 AG / CT
+        [  0, 255,   0],  # 4 AC / GT
+        [255, 165,   0],  # 5 AT
+        [165,  42,  42],  # 6 CG
+        [211, 211, 211]   # 7 NoCall
+    ],
+    dtype=np.uint8
+)
+
+print("Lookup table shape =", code_to_rgb.shape)
+
+# ------------------------------------------------------------
+# 2. 將720×720 code matrix 直接轉成RGB image
+#
+# 原理：
+# 如果某個pixel的值是3，
+# 就抓lookup中第3列 = [160, 32, 240]
+# ------------------------------------------------------------
+
+test_sample_rgb_image = code_to_rgb[
+    test_sample_code_matrix
+]
+
+print(
+    "RGB image shape =",
+    test_sample_rgb_image.shape
+)
+
+print(
+    "RGB image dtype =",
+    test_sample_rgb_image.dtype
+)
+
+
+# ------------------------------------------------------------
+# 1. 建立code -> RGB對照表
+#
+# lookup的第0列代表Code 0
+# lookup的第1列代表Code 1
+# ...
+# lookup的第7列代表Code 7
+# ------------------------------------------------------------
+
+code_to_rgb = np.array(
+    [
+        [255, 255, 255],  # 0 Padding
+        [255,   0,   0],  # 1 AA / TT
+        [  0,   0, 255],  # 2 CC / GG
+        [160,  32, 240],  # 3 AG / CT
+        [  0, 255,   0],  # 4 AC / GT
+        [255, 165,   0],  # 5 AT
+        [165,  42,  42],  # 6 CG
+        [211, 211, 211]   # 7 NoCall
+    ],
+    dtype=np.uint8
+)
+
+print("Lookup table shape =", code_to_rgb.shape)
+
+# ------------------------------------------------------------
+# 3. 基本QC：檢查RGB值範圍
+# ------------------------------------------------------------
+
+print(
+    "RGB min =",
+    test_sample_rgb_image.min()
+)
+
+print(
+    "RGB max =",
+    test_sample_rgb_image.max()
+)
+
+# ------------------------------------------------------------
+# 4. 抽查幾個code的實際RGB
+# ------------------------------------------------------------
+
+for code in range(8):
+    
+    rgb_now = code_to_rgb[code]
+    
+    print(
+        "Code =",
+        code,
+        "| RGB =",
+        tuple(rgb_now)
+    )
+
+# ------------------------------------------------------------
+# 5. 檢查第一顆SNP的 code 與 RGB 是否一致
+# ------------------------------------------------------------
+
+first_row = int(
+    spiral_snp_mapping.loc[0, "spiral_row_py"]
+)
+
+first_col = int(
+    spiral_snp_mapping.loc[0, "spiral_col_py"]
+)
+
+first_code = int(
+    test_sample_code_matrix[first_row, first_col]
+)
+
+first_rgb = test_sample_rgb_image[first_row, first_col]
+
+print(
+    "First SNP variant_id =",
+    spiral_snp_mapping.loc[0, "variant_id"]
+)
+
+print(
+    "First SNP coordinate =",
+    (first_row, first_col)
+)
+
+print(
+    "First SNP code =",
+    first_code
+)
+
+print(
+    "First SNP RGB =",
+    tuple(first_rgb)
+)
+
+print(
+    "Expected RGB from lookup =",
+    tuple(code_to_rgb[first_code])
+)
+
+# ============================================================
+# Step 3-5：顯示單一subject的Center-out Spiral RGB Image
+# ============================================================
+#
+# 目前已有：
+#
+# test_sample_rgb_image
+# -> shape = (720, 720, 3)
+#
+# Spiral設定：
+#
+# 中心開始
+# → 右
+# → 下
+# → 左
+# → 上
+# → 一圈一圈向外擴張
+#
+#
+# 注意：
+# matplotlib的imshow預設：
+#
+# row 0 在圖片最上方
+# col 0 在圖片最左方
+#
+# 這與我們目前建立spiral時的array座標一致，
+# 所以不需要再做上下或左右flip。
+# ============================================================
+
+import matplotlib.pyplot as plt
+
+# ------------------------------------------------------------
+# 1. 顯示完整720×720 RGB image
+# ------------------------------------------------------------
+
+plt.figure(
+    figsize=(10, 10)
+)
+
+plt.imshow(
+    test_sample_rgb_image,
+    interpolation="nearest"
+)
+
+plt.title(
+    "Center-out Spiral Genotype Image"
+)
+
+# genomic image本身不需要座標軸
+plt.axis("off")
+
+plt.tight_layout()
+
+plt.show()
+
+# ============================================================
+# 2. 放大中心31×31區域
+# ============================================================
+#
+# 720×720的起始中心座標：
+#
+# Python 0-based
+# (359, 359)
+#
+# 這裡取中心前後15格，
+# 方便確認spiral pattern。
+# ============================================================
+
+center_row = 359
+center_col = 359
+
+zoom_radius = 15
+
+
+center_zoom_rgb = (
+    test_sample_rgb_image[
+        center_row - zoom_radius:
+        center_row + zoom_radius + 1,
+
+        center_col - zoom_radius:
+        center_col + zoom_radius + 1
+    ]
+)
+
+# ------------------------------------------------------------
+# 3. 顯示中心放大圖
+# ------------------------------------------------------------
+
+plt.figure(
+    figsize=(8, 8)
+)
+
+plt.imshow(
+    center_zoom_rgb,
+    interpolation="nearest"
+)
+
+plt.title(
+    "Center-out Spiral — Center Zoom"
+)
+
+plt.axis("off")
+
+plt.tight_layout()
+
+plt.show()
+
+# ============================================================
+# 4. 查看前15顆SNP的spiral座標與encoding
+# ============================================================
+
+first_15_spiral = (
+    spiral_snp_mapping[
+        [
+            "new_snp_order",
+            "Chr_id",
+            "segment_id_chr_seg1mb",
+            "variant_id",
+            "spiral_row_py",
+            "spiral_col_py"
+        ]
+    ]
+    .head(15)
+    .copy()
+)
+
+
+# 加上這一位subject的encoding code
+first_15_spiral[
+    "encoding_code"
+] = (
+    test_sample_codes[:15]
+)
+
+
+print(
+    first_15_spiral.to_string(
+        index=False
+    )
+)
+
+# ============================================================
+# Step 3-6：批次建立150人的720×720 Spiral Code Matrices
+# ============================================================
+#
+# 輸出：
+#
+# all_sample_code_images
+#
+# shape =
+# (150, 720, 720)
+#
+#
+# 每一個subject：
+# 720 × 720
+#
+# Code：
+# 0 = Padding
+# 1 = AA / TT
+# 2 = CC / GG
+# 3 = AG / CT
+# 4 = AC / GT
+# 5 = AT
+# 6 = CG
+# 7 = NoCall
+#
+#
+# 優點：
+# 每顆SNP只從.pgen讀一次，
+# 一次處理150個subjects。
+# ============================================================
+
+import numpy as np
+import time
+
+# ------------------------------------------------------------
+# 1. 建立150 × 720 × 720 code array
+#
+# 一開始全部設成0：
+# 0 = Padding
+# ------------------------------------------------------------
+
+n_subjects = 150
+
+all_sample_code_images = np.zeros(
+    (
+        n_subjects,
+        spiral_size,
+        spiral_size
+    ),
+    dtype=np.uint8
+)
+
+
+print(
+    "Code image array shape =",
+    all_sample_code_images.shape
+)
+
+print(
+    "Memory size (MB) =",
+    all_sample_code_images.nbytes
+    /
+    1024**2
+)
+
+# ============================================================
+# 2. 根據REF / ALT建立該SNP的三種genotype encoding code
+# ============================================================
+
+def get_encoding_codes_for_variant(
+    ref,
+    alt
+):
+    """
+    回傳：
+        code_refref
+        code_refalt
+        code_altalt
+
+    如果REF或ALT不是A/C/G/T，
+    三種都回NoCall = 7。
+    """
+
+    ref = str(ref).upper()
+    alt = str(alt).upper()
+
+    valid_bases = {
+        "A",
+        "C",
+        "G",
+        "T"
+    }
+
+
+    #非ACGT variant
+    if (
+        ref not in valid_bases
+        or
+        alt not in valid_bases
+    ):
+
+        return 7, 7, 7
+
+
+    #REF/REF
+    genotype_refref = "".join(
+        sorted(
+            [ref, ref]
+        )
+    )
+
+
+    #REF/ALT
+    genotype_refalt = "".join(
+        sorted(
+            [ref, alt]
+        )
+    )
+
+
+    #ALT/ALT
+    genotype_altalt = "".join(
+        sorted(
+            [alt, alt]
+        )
+    )
+
+
+    return (
+        genotype_to_code[
+            genotype_refref
+        ],
+
+        genotype_to_code[
+            genotype_refalt
+        ],
+
+        genotype_to_code[
+            genotype_altalt
+        ]
+    )
+
+# ============================================================
+# 3. 逐SNP讀取150人genotype並直接放進spiral
+# ============================================================
+
+geno_buffer = np.empty(
+    n_subjects,
+    dtype=np.int8
+)
+
+
+start_time = time.time()
+
+
+for i, row in enumerate(
+    spiral_snp_mapping.itertuples(
+        index=False
+    )
+):
+
+
+    # --------------------------------------------------------
+    # 這顆SNP真正的PGEN row index
+    # --------------------------------------------------------
+
+    variant_index = int(
+        row.true_pgen_index
+    )
+
+
+    # --------------------------------------------------------
+    # 讀這顆SNP的150人genotype
+    # --------------------------------------------------------
+
+    pgen_reader.read(
+        variant_index,
+        geno_buffer
+    )
+
+
+    # --------------------------------------------------------
+    # 取得這顆SNP三種hardcall對應的Encoding Code
+    # --------------------------------------------------------
+
+    (
+        code_refref,
+        code_refalt,
+        code_altalt
+    ) = get_encoding_codes_for_variant(
+        row.REF,
+        row.ALT
+    )
+
+
+    # --------------------------------------------------------
+    # 一開始150人全部當NoCall
+    #
+    # 如果PGEN code不是0/1/2，
+    # 就會保持7。
+    # --------------------------------------------------------
+
+    codes_now = np.full(
+        n_subjects,
+        7,
+        dtype=np.uint8
+    )
+
+
+    #REF/REF
+    codes_now[
+        geno_buffer == 0
+    ] = code_refref
+
+
+    #REF/ALT
+    codes_now[
+        geno_buffer == 1
+    ] = code_refalt
+
+
+    #ALT/ALT
+    codes_now[
+        geno_buffer == 2
+    ] = code_altalt
+
+
+    # --------------------------------------------------------
+    # 這顆SNP固定的spiral pixel
+    # --------------------------------------------------------
+
+    row_pixel = int(
+        row.spiral_row_py
+    )
+
+    col_pixel = int(
+        row.spiral_col_py
+    )
+
+
+    # --------------------------------------------------------
+    # 一次把150人的code全部放進同一pixel位置
+    # --------------------------------------------------------
+
+    all_sample_code_images[
+        :,
+        row_pixel,
+        col_pixel
+    ] = codes_now
+
+
+    # --------------------------------------------------------
+    # 每50,000顆SNP顯示一次進度
+    # --------------------------------------------------------
+
+    if (
+        (i + 1) % 50000 == 0
+        or
+        (i + 1) == len(
+            spiral_snp_mapping
+        )
+    ):
+
+        elapsed_min = (
+            time.time()
+            -
+            start_time
+        ) / 60
+
+
+        print(
+            f"SNP "
+            f"{i + 1}/"
+            f"{len(spiral_snp_mapping)} completed"
+            f" | elapsed = {elapsed_min:.2f} min"
+        )
+
+# ============================================================
+# 4. 確認150張matrix
+# ============================================================
+
+print(
+    "Final array shape =",
+    all_sample_code_images.shape
+)
+
+
+# ------------------------------------------------------------
+# 第1個subject
+# ------------------------------------------------------------
+
+sample0_codes, sample0_counts = np.unique(
+    all_sample_code_images[0],
+    return_counts=True
+)
+
+
+print(
+    "\nSubject 1 encoding distribution:"
+)
+
+for code, count in zip(
+    sample0_codes,
+    sample0_counts
+):
+
+    print(
+        "Code =",
+        code,
+        "| Count =",
+        count
+    )
+
+# ============================================================
+# 5. 確認150人的Padding數量完全一致
+# ============================================================
+
+padding_counts_150 = np.sum(
+    all_sample_code_images == 0,
+    axis=(1, 2)
+)
+
+
+print(
+    "\nPadding count min =",
+    padding_counts_150.min()
+)
+
+print(
+    "Padding count max =",
+    padding_counts_150.max()
+)
+
+print(
+    "All subjects have 554 padding pixels =",
+    np.all(
+        padding_counts_150 == 554
+    )
+)
+# ============================================================
+# Step 3-7：讀取150人的PSAM sample order
+# ============================================================
+#
+# 目的：
+#
+# 確認：
+# .pgen中的第i個subject
+# =
+# .psam中的第i個subject
+#
+# 之後產生PNG時，
+# 才能使用正確sample ID當檔名。
+# ============================================================
+
+import pandas as pd
+from pathlib import Path
+# ------------------------------------------------------------
+# 1. PSAM路徑
+# ------------------------------------------------------------
+
+psam_path = (
+    "/Users/sheenazhengmei/Desktop/data/"
+    "talent_150_v9exact.psam"
+)
+
+
+# ------------------------------------------------------------
+# 2. 讀取PSAM
+#
+# sep=r"\s+"
+# 可以處理tab或空白分隔。
+# ------------------------------------------------------------
+
+psam_df = pd.read_csv(
+    psam_path,
+    sep=r"\s+",
+    dtype=str
+)
+
+
+print(
+    "PSAM shape =",
+    psam_df.shape
+)
+
+print(
+    "PSAM columns =",
+    psam_df.columns.tolist()
+)
+
+print(
+    "\nFirst 10 rows:"
+)
+
+print(
+    psam_df.head(10)
+)
+
+# ============================================================
+# 3. 找sample ID欄位
+# ============================================================
+#
+# PLINK2 PSAM常見：
+#
+# #FID IID ...
+#
+# 或：
+#
+# #IID ...
+#
+# 所以兩種都處理。
+# ============================================================
+
+if "IID" in psam_df.columns:
+
+    iid_col = "IID"
+
+elif "#IID" in psam_df.columns:
+
+    iid_col = "#IID"
+
+else:
+
+    raise ValueError(
+        "Cannot find IID column in PSAM."
+    )
+
+
+print(
+    "IID column =",
+    iid_col
+)
+
+# ============================================================
+# 4. 建立150人的正式sample ID順序
+# ============================================================
+
+sample_ids_psam = (
+    psam_df[
+        iid_col
+    ]
+    .astype(str)
+    .tolist()
+)
+
+
+print(
+    "Number of sample IDs =",
+    len(sample_ids_psam)
+)
+
+
+print(
+    "Unique sample IDs =",
+    len(set(sample_ids_psam))
+)
+
+
+print(
+    "\nFirst 10 sample IDs:"
+)
+
+for i, sample_id in enumerate(
+    sample_ids_psam[:10],
+    start=1
+):
+
+    print(
+        i,
+        sample_id
+    )
+
+# ============================================================
+# 5. 確認PSAM與影像數量完全一致
+# ============================================================
+
+print(
+    "Subjects in PSAM =",
+    len(sample_ids_psam)
+)
+
+print(
+    "Subjects in code images =",
+    all_sample_code_images.shape[0]
+)
+
+
+print(
+    "Sample counts match =",
+    len(sample_ids_psam)
+    ==
+    all_sample_code_images.shape[0]
+)
+
+# ============================================================
+# 4. 建立150人的正式sample ID順序
+# ============================================================
+
+sample_ids_psam = (
+    psam_df[
+        iid_col
+    ]
+    .astype(str)
+    .tolist()
+)
+
+
+print(
+    "Number of sample IDs =",
+    len(sample_ids_psam)
+)
+
+
+print(
+    "Unique sample IDs =",
+    len(set(sample_ids_psam))
+)
+
+
+print(
+    "\nFirst 10 sample IDs:"
+)
+
+for i, sample_id in enumerate(
+    sample_ids_psam[:10],
+    start=1
+):
+
+    print(
+        i,
+        sample_id
+    )
+
+# ============================================================
+# Step 3-8：批次產生150人的RGB Spiral PNG
+# ============================================================
+#
+# 已有：
+#
+# all_sample_code_images
+#   shape = (150, 720, 720)
+#
+# sample_ids_psam
+#   150人的正確PSAM順序
+#
+# code_to_rgb
+#   0~7 → RGB lookup table
+#
+#
+# 這一步：
+#
+# 每位subject
+# → 720×720 code matrix
+# → 720×720×3 RGB
+# → 儲存成PNG
+#
+#
+# 每張圖片使用完全相同的：
+#
+# Segment arrangement
+# Center-out spiral mapping
+# Genotype color encoding
+#
+# 所以150人的pixel位置完全一致。
+# ============================================================
+
+from pathlib import Path
+from PIL import Image
+import numpy as np
+import re
+
+# ------------------------------------------------------------
+# 1. 建立PNG輸出資料夾
+# ------------------------------------------------------------
+
+png_output_dir = Path(
+    "/Users/sheenazhengmei/Desktop/"
+    "segment_haplotype_step2/"
+    "centerout_spiral_rgb_150"
+)
+
+
+png_output_dir.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+print(
+    "PNG output directory =",
+    png_output_dir
+)
+
+# ============================================================
+# 2. 建立安全的PNG檔名
+# ============================================================
+#
+# 如果sample ID含有：
+#
+# /
+# :
+# 空白
+# 或其他特殊符號
+#
+# 可能影響檔案路徑。
+#
+# 所以只保留：
+#
+# 英文字母
+# 數字
+# -
+# _
+# .
+# ============================================================
+
+def make_safe_filename(sample_id):
+
+    sample_id = str(
+        sample_id
+    )
+
+    safe_id = re.sub(
+        r"[^A-Za-z0-9_.-]",
+        "_",
+        sample_id
+    )
+
+    return safe_id
+
+
+# ============================================================
+# 3. 逐subject轉RGB並存成PNG
+# ============================================================
+
+saved_png_paths = []
+
+
+for sample_index, sample_id in enumerate(
+    sample_ids_psam
+):
+
+    # --------------------------------------------------------
+    # 取出目前subject的720×720 Code Matrix
+    # --------------------------------------------------------
+
+    code_matrix = (
+        all_sample_code_images[
+            sample_index
+        ]
+    )
+
+
+    # --------------------------------------------------------
+    # Code 0~7
+    # → RGB
+    #
+    # 結果shape：
+    #
+    # 720 × 720 × 3
+    # --------------------------------------------------------
+
+    rgb_image = (
+        code_to_rgb[
+            code_matrix
+        ]
+    )
+
+
+    # --------------------------------------------------------
+    # 建立安全檔名
+    # --------------------------------------------------------
+
+    safe_sample_id = (
+        make_safe_filename(
+            sample_id
+        )
+    )
+
+
+    png_path = (
+        png_output_dir
+        /
+        f"{safe_sample_id}.png"
+    )
+
+
+    # --------------------------------------------------------
+    # NumPy RGB array
+    # → PIL image
+    # → PNG
+    #
+    # 不做resize
+    # 不做interpolation
+    # 不做compression-based image alteration
+    #
+    # 保持720×720原始pixel。
+    # --------------------------------------------------------
+
+    Image.fromarray(
+        rgb_image,
+        mode="RGB"
+    ).save(
+        png_path
+    )
+
+
+    saved_png_paths.append(
+        png_path
+    )
+
+
+    # --------------------------------------------------------
+    # 每10人顯示一次進度
+    # --------------------------------------------------------
+
+    if (
+        (sample_index + 1) % 10 == 0
+        or
+        (sample_index + 1)
+        ==
+        len(sample_ids_psam)
+    ):
+
+        print(
+            f"Saved "
+            f"{sample_index + 1}/"
+            f"{len(sample_ids_psam)} subjects"
+        )
+
+# ============================================================
+# 4. 確認輸出的PNG數量
+# ============================================================
+
+png_files = sorted(
+    png_output_dir.glob(
+        "*.png"
+    )
+)
+
+
+print(
+    "Number of PNG files =",
+    len(png_files)
+)
+
+
+print(
+    "\nFirst 10 PNG files:"
+)
+
+for path in png_files[:10]:
+
+    print(
+        path.name
+    )
+
+# ============================================================
+# 6. 確認存檔前後pixel完全一致
+# ============================================================
+#
+# 原本：
+# all_sample_code_images[0]
+# → code_to_rgb
+#
+# 存PNG後：
+# 再讀回NumPy array
+#
+# 兩者每一個RGB pixel都必須完全相同。
+# ============================================================
+
+original_rgb_subject0 = (
+    code_to_rgb[
+        all_sample_code_images[0]
+    ]
+)
+
+
+saved_rgb_subject0 = np.array(
+    first_saved_image
+)
+
+
+print(
+    "Original RGB shape =",
+    original_rgb_subject0.shape
+)
+
+print(
+    "Saved RGB shape =",
+    saved_rgb_subject0.shape
+)
+
+
+print(
+    "Maximum RGB difference =",
+    np.abs(
+        original_rgb_subject0.astype(int)
+        -
+        saved_rgb_subject0.astype(int)
+    ).max()
+)
+
+
+print(
+    "Pixel-perfect match =",
+    np.array_equal(
+        original_rgb_subject0,
+        saved_rgb_subject0
+    )
+)
+
+# ============================================================
+# Step 4-1：從零重新建立CNN Dataset Manifest
+# ============================================================
+#
+# 注意：
+#
+# 這次Step 4重新開始。
+#
+# 舊CSV只拿：
+#
+# psam_IID
+# label
+# group_id
+# case_control
+#
+# 不使用：
+#
+# fold
+# fold_related
+#
+# 後面的5-fold會重新建立。
+# ============================================================
+
+import pandas as pd
+import numpy as np
+
+from pathlib import Path
+import re
+
+# ============================================================
+# Step 4-1A：尋找原本的sample label CSV實際位置
+# ============================================================
+#
+# 目前錯誤：
+# FileNotFoundError
+#
+# 代表：
+# Python指定的路徑下沒有這個檔案。
+#
+# 所以現在先從Desktop往下搜尋：
+#
+# V9_sample_labels_5fold_related.csv
+#
+# 這一步只找檔案，不做其他分析。
+# ============================================================
+
+from pathlib import Path
+
+
+desktop_path = Path(
+    "/Users/sheenazhengmei/Desktop"
+)
+
+
+target_filename = (
+    "V9_sample_labels_5fold_related.csv"
+)
+
+
+found_files = list(
+    desktop_path.rglob(
+        target_filename
+    )
+)
+
+
+print(
+    "Number of matching files =",
+    len(found_files)
+)
+
+
+for path in found_files:
+
+    print(
+        path
+    )
+
+# ============================================================
+# Step 4-1B：使用正確路徑重新讀取sample label CSV
+# ============================================================
+#
+# 注意：
+# DNA Image 中間有空白，
+# 但放在Python字串裡不需要另外處理。
+# ============================================================
+
+import pandas as pd
+
+
+label_path = (
+    "/Users/sheenazhengmei/Desktop/"
+    "DNA Image/"
+    "V9_whole_genome_atlas_150/"
+    "V9_sample_labels_5fold_related.csv"
+)
+
+
+label_source = pd.read_csv(
+    label_path
+)
+
+
+# ------------------------------------------------------------
+# 確認檔案成功讀取
+# ------------------------------------------------------------
+
+print(
+    "Label table shape =",
+    label_source.shape
+)
+
+print(
+    "\nColumns:"
+)
+
+print(
+    label_source.columns.tolist()
+)
+
+print(
+    "\nFirst 5 rows:"
+)
+
+print(
+    label_source.head()
+)
+
+# ============================================================
+# Step 4-1C：重新建立乾淨的Dataset Manifest
+# ============================================================
+#
+# 目的：
+#
+# 從原本label_source中，
+# 只留下這次CNN真正需要的subject資訊。
+#
+# 舊的：
+# fold
+# fold_related
+#
+# 都不帶進新的dataset_manifest。
+# ============================================================
+
+
+# ------------------------------------------------------------
+# 1. 只保留需要的4個欄位
+# ------------------------------------------------------------
+
+dataset_manifest = (
+    label_source[
+        [
+            "psam_IID",
+            "case_control",
+            "label",
+            "group_id"
+        ]
+    ]
+    .copy()
+)
+
+
+print(
+    "Dataset manifest shape =",
+    dataset_manifest.shape
+)
+
+
+print(
+    "\nColumns =",
+    dataset_manifest.columns.tolist()
+)
+
+# ============================================================
+# 2. 統一欄位資料型態
+# ============================================================
+#
+# psam_IID：
+# 使用字串，避免sample ID被Python當成數字。
+#
+# label：
+# 0 = control
+# 1 = case
+#
+# group_id：
+# matched group編號。
+# ============================================================
+
+dataset_manifest[
+    "psam_IID"
+] = (
+    dataset_manifest[
+        "psam_IID"
+    ]
+    .astype(str)
+)
+
+
+dataset_manifest[
+    "label"
+] = (
+    dataset_manifest[
+        "label"
+    ]
+    .astype(int)
+)
+
+
+dataset_manifest[
+    "group_id"
+] = (
+    dataset_manifest[
+        "group_id"
+    ]
+    .astype(int)
+)
+
+# ============================================================
+# 3. Subject數量QC
+# ============================================================
+
+print(
+    "Number of rows =",
+    len(dataset_manifest)
+)
+
+
+print(
+    "Unique subjects =",
+    dataset_manifest[
+        "psam_IID"
+    ].nunique()
+)
+
+# ============================================================
+# 4. Case / Control QC
+# ============================================================
+
+print(
+    "\nLabel distribution:"
+)
+
+
+print(
+    dataset_manifest[
+        "label"
+    ]
+    .value_counts()
+    .sort_index()
+)
+# ============================================================
+# 5. 檢查50個matched groups
+# ============================================================
+#
+# 每個group理論上：
+#
+# 3 subjects
+# 1 case
+# 2 controls
+# ============================================================
+
+group_qc = (
+    dataset_manifest
+    .groupby(
+        "group_id"
+    )
+    .agg(
+
+        n_subjects=(
+            "psam_IID",
+            "size"
+        ),
+
+        n_case=(
+            "label",
+            "sum"
+        )
+    )
+    .reset_index()
+)
+
+
+# ------------------------------------------------------------
+# control人數 =
+# group總人數 - case人數
+# ------------------------------------------------------------
+
+group_qc[
+    "n_control"
+] = (
+    group_qc[
+        "n_subjects"
+    ]
+    -
+    group_qc[
+        "n_case"
+    ]
+)
+
+
+print(
+    "Number of matched groups =",
+    len(group_qc)
+)
+
+
+print(
+    "\nMatched-group composition:"
+)
+
+
+print(
+    group_qc[
+        [
+            "n_subjects",
+            "n_case",
+            "n_control"
+        ]
+    ]
+    .value_counts()
+)
+# ============================================================
+# 6. 最終Dataset Manifest QC
+# ============================================================
+
+all_groups_valid = (
+    (
+        group_qc[
+            "n_subjects"
+        ] == 3
+    )
+    &
+    (
+        group_qc[
+            "n_case"
+        ] == 1
+    )
+    &
+    (
+        group_qc[
+            "n_control"
+        ] == 2
+    )
+).all()
+
+
+print(
+    "\nTotal subjects =",
+    len(dataset_manifest)
+)
+
+
+print(
+    "Unique subjects =",
+    dataset_manifest[
+        "psam_IID"
+    ].nunique()
+)
+
+
+print(
+    "Matched groups =",
+    dataset_manifest[
+        "group_id"
+    ].nunique()
+)
+
+
+print(
+    "All matched groups valid =",
+    all_groups_valid
+)
+
+# ============================================================
+# Step 4-1D：把新版Center-out Spiral PNG加入dataset_manifest
+# ============================================================
+#
+# 目的：
+#
+# 每個psam_IID
+# ↓
+# 對到自己的PNG
+#
+# 最後確認：
+#
+# 150 subjects
+# 150 PNG
+# 0 missing
+#
+# ============================================================
+
+from pathlib import Path
+import re
+
+# ------------------------------------------------------------
+# 1. 指定新版PNG資料夾
+# ------------------------------------------------------------
+
+png_dir = Path(
+    "/Users/sheenazhengmei/Desktop/"
+    "segment_haplotype_step2/"
+    "centerout_spiral_rgb_150"
+)
+
+
+print(
+    "PNG directory =",
+    png_dir
+)
+
+print(
+    "Directory exists =",
+    png_dir.exists()
+)
+
+# ============================================================
+# 2. 建立sample ID → PNG filename規則
+# ============================================================
+#
+# 存PNG時有把特殊符號替換成 "_"，
+# 所以這裡必須使用相同規則。
+# ============================================================
+
+def make_safe_filename(sample_id):
+
+    return re.sub(
+        r"[^A-Za-z0-9_.-]",
+        "_",
+        str(sample_id)
+    )
+
+# ============================================================
+# 3. 建立每位subject的PNG完整路徑
+# ============================================================
+
+dataset_manifest[
+    "png_file"
+] = (
+    dataset_manifest[
+        "psam_IID"
+    ]
+    .apply(
+        lambda sample_id:
+        str(
+            png_dir
+            /
+            f"{make_safe_filename(sample_id)}.png"
+        )
+    )
+)
+
+# ============================================================
+# 4. 檢查每位subject的PNG是否存在
+# ============================================================
+
+dataset_manifest[
+    "png_exists"
+] = (
+    dataset_manifest[
+        "png_file"
+    ]
+    .apply(
+        lambda path:
+        Path(path).exists()
+    )
+)
+
+
+print(
+    "Total subjects =",
+    len(dataset_manifest)
+)
+
+print(
+    "PNG found =",
+    dataset_manifest[
+        "png_exists"
+    ].sum()
+)
+
+print(
+    "PNG missing =",
+    (
+        ~dataset_manifest[
+            "png_exists"
+        ]
+    ).sum()
+)
+
+# ============================================================
+# 5. 查看前10位subject與圖片路徑
+# ============================================================
+
+print(
+    dataset_manifest[
+        [
+            "psam_IID",
+            "label",
+            "group_id",
+            "png_file",
+            "png_exists"
+        ]
+    ]
+    .head(10)
+    .to_string(
+        index=False
+    )
+)
+# ============================================================
+# 6. 最終PNG mapping QC
+# ============================================================
+
+print(
+    "\nUnique subjects =",
+    dataset_manifest[
+        "psam_IID"
+    ].nunique()
+)
+
+
+print(
+    "Unique PNG paths =",
+    dataset_manifest[
+        "png_file"
+    ].nunique()
+)
+
+
+print(
+    "All PNGs found =",
+    dataset_manifest[
+        "png_exists"
+    ].all()
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
