@@ -1,0 +1,11258 @@
+#age gender的分佈在三set中分佈不顯著：
+#data:Train120_Test30_5fold.csv
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+INPUT_PATH = Path("/Users/sheenazhengmei/Desktop/DNA Image/Train120_Test30_5fold.csv")
+OUTPUT_DIR = Path("/Users/sheenazhengmei/Desktop/DNA Image/Demographic_Analysis")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+FOLD_TO_PLOT = 1   # 改成 1~5
+df=pd.read_csv(INPUT_PATH)
+df['AGE']=pd.to_numeric(df['AGE'],errors='coerce') #coerce不能轉數字時就用nan表示
+df['cv_fold']=pd.to_numeric(df['cv_fold'],errors='coerce')
+df['GENDER']=(df['GENDER'].astype(str).str.strip().str.replace('.0','',regex=False))
+dev_df=(df[df['dataset']!='TEST'].copy())
+test_df=(df[df['dataset']=='TEST'].copy())
+train_df=(dev_df[dev_df['cv_fold']!=FOLD_TO_PLOT].copy())
+val_df=(dev_df[dev_df['cv_fold']==FOLD_TO_PLOT].copy())
+
+print(f'fold{FOLD_TO_PLOT}')
+print('Train=',len(train_df))
+print('val=',len(val_df))
+print('test=',len(test_df))
+
+
+#age----
+age_data=[train_df['AGE'].dropna().values,val_df['AGE'].dropna().values,test_df['AGE'].dropna().values]
+np.random.seed(2026)
+plt.figure(figsize=(7,6))
+plt.boxplot(age_data,tick_labels=['train','val','test'],showmeans=True)
+for i , values in enumerate(age_data, start=1):
+    jitter=np.random.normal(loc=i,scale=0.04,size=len(values))
+    plt.scatter(jitter, values,alpha=0.55,s=25)
+plt.ylabel('age(yrs)')
+plt.xlabel('dataset')
+plt.title(f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}")
+plt.tight_layout()
+AGE_PLOT_PATH = (OUTPUT_DIR/f"Fold{FOLD_TO_PLOT}_Age_Distribution.png")
+plt.savefig(AGE_PLOT_PATH,dpi=300,bbox_inches="tight")
+plt.show()
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+INPUT_PATH = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/Train120_Test30_5fold.csv"
+)
+
+OUTPUT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/Demographic_Analysis"
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+FOLD_TO_PLOT = 1
+
+df = pd.read_csv(INPUT_PATH)
+
+df["AGE"] = pd.to_numeric(
+    df["AGE"],
+    errors="coerce"
+)
+
+df["cv_fold"] = pd.to_numeric(
+    df["cv_fold"],
+    errors="coerce"
+)
+
+df["GENDER"] = (
+    df["GENDER"]
+    .astype(str)
+    .str.strip()
+    .str.replace(".0", "", regex=False)
+)
+
+dev_df = (
+    df[
+        df["dataset"] != "Test"
+    ]
+    .copy()
+)
+
+test_df = (
+    df[
+        df["dataset"] == "Test"
+    ]
+    .copy()
+)
+
+train_df = (
+    dev_df[
+        dev_df["cv_fold"] != FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+val_df = (
+    dev_df[
+        dev_df["cv_fold"] == FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+print(
+    f"Fold {FOLD_TO_PLOT}"
+)
+
+print(
+    "Train =",
+    len(train_df)
+)
+
+print(
+    "Validation =",
+    len(val_df)
+)
+
+print(
+    "Test =",
+    len(test_df)
+)
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+age_data = [
+    train_df["AGE"].dropna().values,
+    val_df["AGE"].dropna().values,
+    test_df["AGE"].dropna().values
+]
+
+np.random.seed(2026)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+plt.boxplot(
+    age_data,
+    tick_labels=[
+        "Train",
+        "Validation",
+        "Test"
+    ],
+    showmeans=True
+)
+
+for i, values in enumerate(
+    age_data,
+    start=1
+):
+
+    jitter = np.random.normal(
+        loc=i,
+        scale=0.04,
+        size=len(values)
+    )
+
+    plt.scatter(
+        jitter,
+        values,
+        alpha=0.55,
+        s=25
+    )
+
+plt.ylabel(
+    "Age (years)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.title(
+    f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.tight_layout()
+
+AGE_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Age_Distribution.png"
+)
+
+plt.savefig(
+    AGE_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+# ============================================================
+# GENDER
+# ============================================================
+
+set_order = [
+    "Train",
+    "Validation",
+    "Test"
+]
+
+gender_levels = sorted(
+    df["GENDER"]
+    .dropna()
+    .unique()
+)
+
+gender_plot_records = []
+
+for set_name, current_df in [
+    ("Train", train_df),
+    ("Validation", val_df),
+    ("Test", test_df)
+]:
+
+    total = len(current_df)
+
+    for gender in gender_levels:
+
+        count = (
+            current_df["GENDER"]
+            ==
+            gender
+        ).sum()
+
+        percentage = (
+            count
+            /
+            total
+            *
+            100
+        )
+
+        gender_plot_records.append(
+            {
+                "Set":
+                    set_name,
+
+                "Gender":
+                    f"Gender {gender}",
+
+                "Count":
+                    count,
+
+                "Percent":
+                    percentage
+            }
+        )
+
+gender_plot_df = pd.DataFrame(
+    gender_plot_records
+)
+
+x = np.arange(
+    len(set_order)
+)
+
+width = (
+    0.7
+    /
+    len(gender_levels)
+)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+for j, gender in enumerate(
+    gender_levels
+):
+
+    current = (
+        gender_plot_df[
+            gender_plot_df["Gender"]
+            ==
+            f"Gender {gender}"
+        ]
+        .set_index("Set")
+        .reindex(set_order)
+    )
+
+    positions = (
+        x
+        -
+        0.35
+        +
+        width / 2
+        +
+        j * width
+    )
+
+    bars = plt.bar(
+        positions,
+        current["Percent"],
+        width=width,
+        label=f"Gender {gender}"
+    )
+
+    for bar, value in zip(
+        bars,
+        current["Percent"]
+    ):
+
+        plt.text(
+            bar.get_x()
+            +
+            bar.get_width() / 2,
+            bar.get_height()
+            +
+            1,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+plt.xticks(
+    x,
+    set_order
+)
+
+plt.ylabel(
+    "Percentage (%)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.ylim(
+    0,
+    100
+)
+
+plt.title(
+    f"Gender Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+GENDER_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Gender_Distribution.png"
+)
+
+plt.savefig(
+    GENDER_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+print(
+    "\nSaved:"
+)
+
+print(
+    AGE_PLOT_PATH
+)
+
+print(
+    GENDER_PLOT_PATH
+)
+
+
+#fold2-------------------------
+FOLD_TO_PLOT = 2
+
+df = pd.read_csv(INPUT_PATH)
+
+df["AGE"] = pd.to_numeric(
+    df["AGE"],
+    errors="coerce"
+)
+
+df["cv_fold"] = pd.to_numeric(
+    df["cv_fold"],
+    errors="coerce"
+)
+
+df["GENDER"] = (
+    df["GENDER"]
+    .astype(str)
+    .str.strip()
+    .str.replace(".0", "", regex=False)
+)
+
+dev_df = (
+    df[
+        df["dataset"] != "Test"
+    ]
+    .copy()
+)
+
+test_df = (
+    df[
+        df["dataset"] == "Test"
+    ]
+    .copy()
+)
+
+train_df = (
+    dev_df[
+        dev_df["cv_fold"] != FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+val_df = (
+    dev_df[
+        dev_df["cv_fold"] == FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+print(
+    f"Fold {FOLD_TO_PLOT}"
+)
+
+print(
+    "Train =",
+    len(train_df)
+)
+
+print(
+    "Validation =",
+    len(val_df)
+)
+
+print(
+    "Test =",
+    len(test_df)
+)
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+age_data = [
+    train_df["AGE"].dropna().values,
+    val_df["AGE"].dropna().values,
+    test_df["AGE"].dropna().values
+]
+
+np.random.seed(2026)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+plt.boxplot(
+    age_data,
+    tick_labels=[
+        "Train",
+        "Validation",
+        "Test"
+    ],
+    showmeans=True
+)
+
+for i, values in enumerate(
+    age_data,
+    start=1
+):
+
+    jitter = np.random.normal(
+        loc=i,
+        scale=0.04,
+        size=len(values)
+    )
+
+    plt.scatter(
+        jitter,
+        values,
+        alpha=0.55,
+        s=25
+    )
+
+plt.ylabel(
+    "Age (years)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.title(
+    f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.tight_layout()
+
+AGE_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Age_Distribution.png"
+)
+
+plt.savefig(
+    AGE_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+# ============================================================
+# GENDER
+# ============================================================
+
+set_order = [
+    "Train",
+    "Validation",
+    "Test"
+]
+
+gender_levels = sorted(
+    df["GENDER"]
+    .dropna()
+    .unique()
+)
+
+gender_plot_records = []
+
+for set_name, current_df in [
+    ("Train", train_df),
+    ("Validation", val_df),
+    ("Test", test_df)
+]:
+
+    total = len(current_df)
+
+    for gender in gender_levels:
+
+        count = (
+            current_df["GENDER"]
+            ==
+            gender
+        ).sum()
+
+        percentage = (
+            count
+            /
+            total
+            *
+            100
+        )
+
+        gender_plot_records.append(
+            {
+                "Set":
+                    set_name,
+
+                "Gender":
+                    f"Gender {gender}",
+
+                "Count":
+                    count,
+
+                "Percent":
+                    percentage
+            }
+        )
+
+gender_plot_df = pd.DataFrame(
+    gender_plot_records
+)
+
+x = np.arange(
+    len(set_order)
+)
+
+width = (
+    0.7
+    /
+    len(gender_levels)
+)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+for j, gender in enumerate(
+    gender_levels
+):
+
+    current = (
+        gender_plot_df[
+            gender_plot_df["Gender"]
+            ==
+            f"Gender {gender}"
+        ]
+        .set_index("Set")
+        .reindex(set_order)
+    )
+
+    positions = (
+        x
+        -
+        0.35
+        +
+        width / 2
+        +
+        j * width
+    )
+
+    bars = plt.bar(
+        positions,
+        current["Percent"],
+        width=width,
+        label=f"Gender {gender}"
+    )
+
+    for bar, value in zip(
+        bars,
+        current["Percent"]
+    ):
+
+        plt.text(
+            bar.get_x()
+            +
+            bar.get_width() / 2,
+            bar.get_height()
+            +
+            1,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+plt.xticks(
+    x,
+    set_order
+)
+
+plt.ylabel(
+    "Percentage (%)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.ylim(
+    0,
+    100
+)
+
+plt.title(
+    f"Gender Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+GENDER_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Gender_Distribution.png"
+)
+
+plt.savefig(
+    GENDER_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+print(
+    "\nSaved:"
+)
+
+print(
+    AGE_PLOT_PATH
+)
+
+print(
+    GENDER_PLOT_PATH
+)
+
+#fold3--------------------------
+FOLD_TO_PLOT = 3
+df = pd.read_csv(INPUT_PATH)
+
+df["AGE"] = pd.to_numeric(
+    df["AGE"],
+    errors="coerce"
+)
+
+df["cv_fold"] = pd.to_numeric(
+    df["cv_fold"],
+    errors="coerce"
+)
+
+df["GENDER"] = (
+    df["GENDER"]
+    .astype(str)
+    .str.strip()
+    .str.replace(".0", "", regex=False)
+)
+
+dev_df = (
+    df[
+        df["dataset"] != "Test"
+    ]
+    .copy()
+)
+
+test_df = (
+    df[
+        df["dataset"] == "Test"
+    ]
+    .copy()
+)
+
+train_df = (
+    dev_df[
+        dev_df["cv_fold"] != FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+val_df = (
+    dev_df[
+        dev_df["cv_fold"] == FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+print(
+    f"Fold {FOLD_TO_PLOT}"
+)
+
+print(
+    "Train =",
+    len(train_df)
+)
+
+print(
+    "Validation =",
+    len(val_df)
+)
+
+print(
+    "Test =",
+    len(test_df)
+)
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+age_data = [
+    train_df["AGE"].dropna().values,
+    val_df["AGE"].dropna().values,
+    test_df["AGE"].dropna().values
+]
+
+np.random.seed(2026)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+plt.boxplot(
+    age_data,
+    tick_labels=[
+        "Train",
+        "Validation",
+        "Test"
+    ],
+    showmeans=True
+)
+
+for i, values in enumerate(
+    age_data,
+    start=1
+):
+
+    jitter = np.random.normal(
+        loc=i,
+        scale=0.04,
+        size=len(values)
+    )
+
+    plt.scatter(
+        jitter,
+        values,
+        alpha=0.55,
+        s=25
+    )
+
+plt.ylabel(
+    "Age (years)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.title(
+    f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.tight_layout()
+
+AGE_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Age_Distribution.png"
+)
+
+plt.savefig(
+    AGE_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+# ============================================================
+# GENDER
+# ============================================================
+
+set_order = [
+    "Train",
+    "Validation",
+    "Test"
+]
+
+gender_levels = sorted(
+    df["GENDER"]
+    .dropna()
+    .unique()
+)
+
+gender_plot_records = []
+
+for set_name, current_df in [
+    ("Train", train_df),
+    ("Validation", val_df),
+    ("Test", test_df)
+]:
+
+    total = len(current_df)
+
+    for gender in gender_levels:
+
+        count = (
+            current_df["GENDER"]
+            ==
+            gender
+        ).sum()
+
+        percentage = (
+            count
+            /
+            total
+            *
+            100
+        )
+
+        gender_plot_records.append(
+            {
+                "Set":
+                    set_name,
+
+                "Gender":
+                    f"Gender {gender}",
+
+                "Count":
+                    count,
+
+                "Percent":
+                    percentage
+            }
+        )
+
+gender_plot_df = pd.DataFrame(
+    gender_plot_records
+)
+
+x = np.arange(
+    len(set_order)
+)
+
+width = (
+    0.7
+    /
+    len(gender_levels)
+)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+for j, gender in enumerate(
+    gender_levels
+):
+
+    current = (
+        gender_plot_df[
+            gender_plot_df["Gender"]
+            ==
+            f"Gender {gender}"
+        ]
+        .set_index("Set")
+        .reindex(set_order)
+    )
+
+    positions = (
+        x
+        -
+        0.35
+        +
+        width / 2
+        +
+        j * width
+    )
+
+    bars = plt.bar(
+        positions,
+        current["Percent"],
+        width=width,
+        label=f"Gender {gender}"
+    )
+
+    for bar, value in zip(
+        bars,
+        current["Percent"]
+    ):
+
+        plt.text(
+            bar.get_x()
+            +
+            bar.get_width() / 2,
+            bar.get_height()
+            +
+            1,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+plt.xticks(
+    x,
+    set_order
+)
+
+plt.ylabel(
+    "Percentage (%)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.ylim(
+    0,
+    100
+)
+
+plt.title(
+    f"Gender Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+GENDER_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Gender_Distribution.png"
+)
+
+plt.savefig(
+    GENDER_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+print(
+    "\nSaved:"
+)
+
+print(
+    AGE_PLOT_PATH
+)
+
+print(
+    GENDER_PLOT_PATH
+)
+
+#fold4-------------------
+FOLD_TO_PLOT = 4
+
+df = pd.read_csv(INPUT_PATH)
+
+df["AGE"] = pd.to_numeric(
+    df["AGE"],
+    errors="coerce"
+)
+
+df["cv_fold"] = pd.to_numeric(
+    df["cv_fold"],
+    errors="coerce"
+)
+
+df["GENDER"] = (
+    df["GENDER"]
+    .astype(str)
+    .str.strip()
+    .str.replace(".0", "", regex=False)
+)
+
+dev_df = (
+    df[
+        df["dataset"] != "Test"
+    ]
+    .copy()
+)
+
+test_df = (
+    df[
+        df["dataset"] == "Test"
+    ]
+    .copy()
+)
+
+train_df = (
+    dev_df[
+        dev_df["cv_fold"] != FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+val_df = (
+    dev_df[
+        dev_df["cv_fold"] == FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+print(
+    f"Fold {FOLD_TO_PLOT}"
+)
+
+print(
+    "Train =",
+    len(train_df)
+)
+
+print(
+    "Validation =",
+    len(val_df)
+)
+
+print(
+    "Test =",
+    len(test_df)
+)
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+age_data = [
+    train_df["AGE"].dropna().values,
+    val_df["AGE"].dropna().values,
+    test_df["AGE"].dropna().values
+]
+
+np.random.seed(2026)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+plt.boxplot(
+    age_data,
+    tick_labels=[
+        "Train",
+        "Validation",
+        "Test"
+    ],
+    showmeans=True
+)
+
+for i, values in enumerate(
+    age_data,
+    start=1
+):
+
+    jitter = np.random.normal(
+        loc=i,
+        scale=0.04,
+        size=len(values)
+    )
+
+    plt.scatter(
+        jitter,
+        values,
+        alpha=0.55,
+        s=25
+    )
+
+plt.ylabel(
+    "Age (years)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.title(
+    f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.tight_layout()
+
+AGE_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Age_Distribution.png"
+)
+
+plt.savefig(
+    AGE_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+# ============================================================
+# GENDER
+# ============================================================
+
+set_order = [
+    "Train",
+    "Validation",
+    "Test"
+]
+
+gender_levels = sorted(
+    df["GENDER"]
+    .dropna()
+    .unique()
+)
+
+gender_plot_records = []
+
+for set_name, current_df in [
+    ("Train", train_df),
+    ("Validation", val_df),
+    ("Test", test_df)
+]:
+
+    total = len(current_df)
+
+    for gender in gender_levels:
+
+        count = (
+            current_df["GENDER"]
+            ==
+            gender
+        ).sum()
+
+        percentage = (
+            count
+            /
+            total
+            *
+            100
+        )
+
+        gender_plot_records.append(
+            {
+                "Set":
+                    set_name,
+
+                "Gender":
+                    f"Gender {gender}",
+
+                "Count":
+                    count,
+
+                "Percent":
+                    percentage
+            }
+        )
+
+gender_plot_df = pd.DataFrame(
+    gender_plot_records
+)
+
+x = np.arange(
+    len(set_order)
+)
+
+width = (
+    0.7
+    /
+    len(gender_levels)
+)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+for j, gender in enumerate(
+    gender_levels
+):
+
+    current = (
+        gender_plot_df[
+            gender_plot_df["Gender"]
+            ==
+            f"Gender {gender}"
+        ]
+        .set_index("Set")
+        .reindex(set_order)
+    )
+
+    positions = (
+        x
+        -
+        0.35
+        +
+        width / 2
+        +
+        j * width
+    )
+
+    bars = plt.bar(
+        positions,
+        current["Percent"],
+        width=width,
+        label=f"Gender {gender}"
+    )
+
+    for bar, value in zip(
+        bars,
+        current["Percent"]
+    ):
+
+        plt.text(
+            bar.get_x()
+            +
+            bar.get_width() / 2,
+            bar.get_height()
+            +
+            1,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+plt.xticks(
+    x,
+    set_order
+)
+
+plt.ylabel(
+    "Percentage (%)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.ylim(
+    0,
+    100
+)
+
+plt.title(
+    f"Gender Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+GENDER_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Gender_Distribution.png"
+)
+
+plt.savefig(
+    GENDER_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+print(
+    "\nSaved:"
+)
+
+print(
+    AGE_PLOT_PATH
+)
+
+print(
+    GENDER_PLOT_PATH
+)
+
+
+#fold5-------------------------------------
+FOLD_TO_PLOT = 5
+
+df = pd.read_csv(INPUT_PATH)
+
+df["AGE"] = pd.to_numeric(
+    df["AGE"],
+    errors="coerce"
+)
+
+df["cv_fold"] = pd.to_numeric(
+    df["cv_fold"],
+    errors="coerce"
+)
+
+df["GENDER"] = (
+    df["GENDER"]
+    .astype(str)
+    .str.strip()
+    .str.replace(".0", "", regex=False)
+)
+
+dev_df = (
+    df[
+        df["dataset"] != "Test"
+    ]
+    .copy()
+)
+
+test_df = (
+    df[
+        df["dataset"] == "Test"
+    ]
+    .copy()
+)
+
+train_df = (
+    dev_df[
+        dev_df["cv_fold"] != FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+val_df = (
+    dev_df[
+        dev_df["cv_fold"] == FOLD_TO_PLOT
+    ]
+    .copy()
+)
+
+print(
+    f"Fold {FOLD_TO_PLOT}"
+)
+
+print(
+    "Train =",
+    len(train_df)
+)
+
+print(
+    "Validation =",
+    len(val_df)
+)
+
+print(
+    "Test =",
+    len(test_df)
+)
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+age_data = [
+    train_df["AGE"].dropna().values,
+    val_df["AGE"].dropna().values,
+    test_df["AGE"].dropna().values
+]
+
+np.random.seed(2026)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+plt.boxplot(
+    age_data,
+    tick_labels=[
+        "Train",
+        "Validation",
+        "Test"
+    ],
+    showmeans=True
+)
+
+for i, values in enumerate(
+    age_data,
+    start=1
+):
+
+    jitter = np.random.normal(
+        loc=i,
+        scale=0.04,
+        size=len(values)
+    )
+
+    plt.scatter(
+        jitter,
+        values,
+        alpha=0.55,
+        s=25
+    )
+
+plt.ylabel(
+    "Age (years)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.title(
+    f"Age Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.tight_layout()
+
+AGE_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Age_Distribution.png"
+)
+
+plt.savefig(
+    AGE_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+# ============================================================
+# GENDER
+# ============================================================
+
+set_order = [
+    "Train",
+    "Validation",
+    "Test"
+]
+
+gender_levels = sorted(
+    df["GENDER"]
+    .dropna()
+    .unique()
+)
+
+gender_plot_records = []
+
+for set_name, current_df in [
+    ("Train", train_df),
+    ("Validation", val_df),
+    ("Test", test_df)
+]:
+
+    total = len(current_df)
+
+    for gender in gender_levels:
+
+        count = (
+            current_df["GENDER"]
+            ==
+            gender
+        ).sum()
+
+        percentage = (
+            count
+            /
+            total
+            *
+            100
+        )
+
+        gender_plot_records.append(
+            {
+                "Set":
+                    set_name,
+
+                "Gender":
+                    f"Gender {gender}",
+
+                "Count":
+                    count,
+
+                "Percent":
+                    percentage
+            }
+        )
+
+gender_plot_df = pd.DataFrame(
+    gender_plot_records
+)
+
+x = np.arange(
+    len(set_order)
+)
+
+width = (
+    0.7
+    /
+    len(gender_levels)
+)
+
+plt.figure(
+    figsize=(7, 6)
+)
+
+for j, gender in enumerate(
+    gender_levels
+):
+
+    current = (
+        gender_plot_df[
+            gender_plot_df["Gender"]
+            ==
+            f"Gender {gender}"
+        ]
+        .set_index("Set")
+        .reindex(set_order)
+    )
+
+    positions = (
+        x
+        -
+        0.35
+        +
+        width / 2
+        +
+        j * width
+    )
+
+    bars = plt.bar(
+        positions,
+        current["Percent"],
+        width=width,
+        label=f"Gender {gender}"
+    )
+
+    for bar, value in zip(
+        bars,
+        current["Percent"]
+    ):
+
+        plt.text(
+            bar.get_x()
+            +
+            bar.get_width() / 2,
+            bar.get_height()
+            +
+            1,
+            f"{value:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
+
+plt.xticks(
+    x,
+    set_order
+)
+
+plt.ylabel(
+    "Percentage (%)"
+)
+
+plt.xlabel(
+    "Dataset"
+)
+
+plt.ylim(
+    0,
+    100
+)
+
+plt.title(
+    f"Gender Distribution Across Datasets — Fold {FOLD_TO_PLOT}"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+GENDER_PLOT_PATH = (
+    OUTPUT_DIR
+    /
+    f"Fold{FOLD_TO_PLOT}_Gender_Distribution.png"
+)
+
+plt.savefig(
+    GENDER_PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+print(
+    "\nSaved:"
+)
+
+print(
+    AGE_PLOT_PATH
+)
+
+print(
+    GENDER_PLOT_PATH
+)
+
+# ============================================================
+# Original V6
+# Current demographic-balanced split
+# 5-fold training-reference Z-score threshold optimization
+# ============================================================
+
+from pathlib import Path
+
+import copy
+import gc
+import random
+import re
+
+import numpy as np
+import pandas as pd
+
+import torch
+import torch.nn as nn
+
+from sklearn.metrics import roc_auc_score
+
+
+# ============================================================
+# STEP 1
+# Required objects
+# ============================================================
+
+required_objects = [
+    "exp1_train_df",
+    "exp1_test_df",
+    "build_exp1_v6_model",
+    "build_final_dataloaders",
+    "build_training_objects",
+    "train_one_epoch",
+    "evaluate_one_epoch"
+]
+
+missing_objects = [
+    obj
+    for obj in required_objects
+    if obj not in globals()
+]
+
+assert len(missing_objects) == 0, (
+    "目前 notebook 缺少："
+    f"{missing_objects}"
+)
+
+
+# ============================================================
+# STEP 2
+# Seed
+# ============================================================
+
+def set_v6_z_seed(seed):
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+# ============================================================
+# STEP 3
+# Device
+# ============================================================
+
+if (
+    hasattr(torch.backends, "mps")
+    and
+    torch.backends.mps.is_available()
+):
+
+    device_v6_z = torch.device("mps")
+
+elif torch.cuda.is_available():
+
+    device_v6_z = torch.device("cuda")
+
+else:
+
+    device_v6_z = torch.device("cpu")
+
+
+print(
+    "Device =",
+    device_v6_z
+)
+
+
+# ============================================================
+# STEP 4
+# Read current fixed split
+# ============================================================
+
+SPLIT_PATH = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "Train120_Test30_5fold.csv"
+)
+
+
+split_df = pd.read_csv(
+    SPLIT_PATH
+)
+
+
+split_df["label"] = (
+    split_df["role"]
+    .map(
+        {
+            "Case": 1,
+            "Control1": 0,
+            "Control2": 0
+        }
+    )
+)
+
+
+split_df["group_id"] = (
+    split_df["matched_set_row"]
+)
+
+
+# ============================================================
+# STEP 5
+# Normalize ID
+# ============================================================
+
+def normalize_subject_id(x):
+
+    if pd.isna(x):
+        return pd.NA
+
+    s = str(x).strip().upper()
+
+    s = re.sub(
+        r"\s+",
+        "",
+        s
+    )
+
+    compact = re.sub(
+        r"[-_]",
+        "",
+        s
+    )
+
+    match = re.fullmatch(
+        r"([A-Z]+)(\d{2})(\d{5})",
+        compact
+    )
+
+    if match is not None:
+
+        return (
+            f"{match.group(1)}"
+            f"{match.group(2)}"
+            f"-"
+            f"{match.group(3)}"
+        )
+
+    return compact
+
+
+split_df["ID"] = (
+    split_df["ID"]
+    .apply(
+        normalize_subject_id
+    )
+)
+
+
+# ============================================================
+# STEP 6
+# Image path
+# ============================================================
+
+old_image_metadata = pd.concat(
+    [
+        exp1_train_df,
+        exp1_test_df
+    ],
+    ignore_index=True
+).copy()
+
+
+old_image_metadata["ID"] = (
+    old_image_metadata["psam_IID"]
+    .apply(
+        normalize_subject_id
+    )
+)
+
+
+if "png_file_fixed" in old_image_metadata.columns:
+
+    IMAGE_PATH_COL = "png_file_fixed"
+
+elif "png_file" in old_image_metadata.columns:
+
+    IMAGE_PATH_COL = "png_file"
+
+else:
+
+    raise ValueError(
+        "找不到 png_file_fixed 或 png_file"
+    )
+
+
+image_lookup = (
+    old_image_metadata[
+        [
+            "ID",
+            IMAGE_PATH_COL
+        ]
+    ]
+    .copy()
+    .rename(
+        columns={
+            IMAGE_PATH_COL:
+                "png_file"
+        }
+    )
+)
+
+
+model_df = (
+    split_df
+    .drop(
+        columns=[
+            "png_file"
+        ],
+        errors="ignore"
+    )
+    .merge(
+        image_lookup,
+        on="ID",
+        how="left",
+        validate="one_to_one"
+    )
+)
+
+
+assert model_df["png_file"].notna().all()
+
+
+assert (
+    model_df["png_file"]
+    .apply(
+        lambda x:
+            Path(str(x)).exists()
+    )
+).all()
+
+
+# ============================================================
+# STEP 7
+# Train120 / Test30
+# ============================================================
+
+v6_train120 = (
+    model_df[
+        model_df["dataset"]
+        !=
+        "Test"
+    ]
+    .copy()
+    .reset_index(drop=True)
+)
+
+
+v6_test30 = (
+    model_df[
+        model_df["dataset"]
+        ==
+        "Test"
+    ]
+    .copy()
+    .reset_index(drop=True)
+)
+
+
+v6_train120["cv_fold"] = (
+    v6_train120["cv_fold"]
+    .astype(int)
+)
+
+
+assert len(v6_train120) == 120
+assert len(v6_test30) == 30
+
+assert v6_train120["label"].sum() == 40
+assert v6_test30["label"].sum() == 10
+
+
+# ============================================================
+# STEP 8
+# Hyperparameters
+# ============================================================
+
+N_FOLDS = 5
+
+BATCH_SIZE = 2
+
+DROPOUT_RATE = 0.5
+
+LEARNING_RATE = 5e-5
+
+WEIGHT_DECAY = 1e-3
+
+MAX_EPOCHS = 30
+
+EARLY_STOPPING_PATIENCE = 5
+
+LR_PATIENCE = 2
+
+LR_FACTOR = 0.5
+
+MIN_LEARNING_RATE = 1e-6
+
+MODEL_SEED_BASE = 20260924
+
+FINAL_MODEL_SEED = 20261006
+
+
+# ============================================================
+# STEP 9
+# Metric function
+# ============================================================
+
+def z_metrics(
+    y_true,
+    scores,
+    threshold
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+
+    y_pred = (
+        scores
+        >=
+        threshold
+    ).astype(int)
+
+
+    tp = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    fn = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    tn = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    fp = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 1)
+        )
+    )
+
+
+    sensitivity = (
+        tp / (tp + fn)
+        if
+        (tp + fn) > 0
+        else
+        np.nan
+    )
+
+
+    specificity = (
+        tn / (tn + fp)
+        if
+        (tn + fp) > 0
+        else
+        np.nan
+    )
+
+
+    accuracy = (
+        (tp + tn)
+        /
+        len(y_true)
+    )
+
+
+    balanced_accuracy = (
+        sensitivity
+        +
+        specificity
+    ) / 2
+
+
+    ppv = (
+        tp / (tp + fp)
+        if
+        (tp + fp) > 0
+        else
+        np.nan
+    )
+
+
+    npv = (
+        tn / (tn + fn)
+        if
+        (tn + fn) > 0
+        else
+        np.nan
+    )
+
+
+    auc = roc_auc_score(
+        y_true,
+        scores
+    )
+
+
+    return {
+        "AUC":
+            auc,
+
+        "Accuracy":
+            accuracy,
+
+        "Sensitivity":
+            sensitivity,
+
+        "Specificity":
+            specificity,
+
+        "Balanced_Accuracy":
+            balanced_accuracy,
+
+        "PPV":
+            ppv,
+
+        "NPV":
+            npv,
+
+        "TP":
+            tp,
+
+        "FN":
+            fn,
+
+        "TN":
+            tn,
+
+        "FP":
+            fp
+    }
+
+
+# ============================================================
+# STEP 10
+# Threshold selection
+# ============================================================
+
+def select_z_threshold(
+    y_true,
+    scores
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+
+    unique_scores = np.sort(
+        np.unique(
+            scores
+        )
+    )
+
+
+    midpoints = (
+        unique_scores[:-1]
+        +
+        unique_scores[1:]
+    ) / 2
+
+
+    thresholds = np.concatenate(
+        [
+            [
+                np.nextafter(
+                    unique_scores.min(),
+                    -np.inf
+                )
+            ],
+            midpoints,
+            [
+                np.nextafter(
+                    unique_scores.max(),
+                    np.inf
+                )
+            ]
+        ]
+    )
+
+
+    records = []
+
+
+    for threshold in thresholds:
+
+        metrics = z_metrics(
+
+            y_true=
+                y_true,
+
+            scores=
+                scores,
+
+            threshold=
+                threshold
+        )
+
+
+        records.append(
+            {
+                "Threshold":
+                    threshold,
+
+                **metrics,
+
+                "sens_spec_difference":
+                    abs(
+                        metrics["Sensitivity"]
+                        -
+                        metrics["Specificity"]
+                    )
+            }
+        )
+
+
+    table = pd.DataFrame(
+        records
+    )
+
+
+    max_ba = table[
+        "Balanced_Accuracy"
+    ].max()
+
+
+    candidates = (
+        table[
+            np.isclose(
+                table[
+                    "Balanced_Accuracy"
+                ],
+                max_ba,
+                atol=1e-12
+            )
+        ]
+        .copy()
+    )
+
+
+    min_diff = candidates[
+        "sens_spec_difference"
+    ].min()
+
+
+    candidates = (
+        candidates[
+            np.isclose(
+                candidates[
+                    "sens_spec_difference"
+                ],
+                min_diff,
+                atol=1e-12
+            )
+        ]
+        .copy()
+        .sort_values(
+            "Threshold"
+        )
+        .reset_index(drop=True)
+    )
+
+
+    selected = candidates.iloc[
+        len(candidates) // 2
+    ]
+
+
+    return (
+        selected,
+        table
+    )
+
+
+# ============================================================
+# STEP 11
+# 5-fold CV
+# ============================================================
+
+fold_records = []
+
+oof_records = []
+
+history_records = []
+
+
+for fold_number in range(
+    1,
+    N_FOLDS + 1
+):
+
+    model_seed = (
+        MODEL_SEED_BASE
+        +
+        fold_number
+    )
+
+
+    set_v6_z_seed(
+        model_seed
+    )
+
+
+    print(
+        "\n"
+        +
+        "=" * 110
+    )
+
+
+    print(
+        f"ORIGINAL V6 + Z-SCORE | FOLD {fold_number}/5"
+    )
+
+
+    print(
+        "=" * 110
+    )
+
+
+    fold_val_df = (
+        v6_train120[
+            v6_train120[
+                "cv_fold"
+            ]
+            ==
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+
+    fold_train_df = (
+        v6_train120[
+            v6_train120[
+                "cv_fold"
+            ]
+            !=
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+
+    assert len(fold_train_df) == 96
+    assert len(fold_val_df) == 24
+
+    assert fold_train_df["label"].sum() == 32
+    assert fold_val_df["label"].sum() == 8
+
+
+    (
+        train_dataset,
+        train_eval_dataset,
+        val_dataset,
+
+        train_loader,
+        train_eval_loader,
+        val_loader
+
+    ) = build_final_dataloaders(
+
+        train_df=
+            fold_train_df,
+
+        val_df=
+            fold_train_df,
+
+        test_df=
+            fold_val_df,
+
+        run_seed=
+            model_seed,
+
+        batch_size=
+            BATCH_SIZE
+    )
+
+
+    set_v6_z_seed(
+        model_seed
+    )
+
+
+    model = build_exp1_v6_model(
+
+        seed=
+            model_seed,
+
+        device=
+            device_v6_z,
+
+        dropout_rate=
+            DROPOUT_RATE
+    )
+
+
+    (
+        criterion,
+        optimizer,
+        pos_weight
+
+    ) = build_training_objects(
+
+        model=
+            model,
+
+        train_df=
+            fold_train_df,
+
+        device=
+            device_v6_z,
+
+        learning_rate=
+            LEARNING_RATE,
+
+        weight_decay=
+            WEIGHT_DECAY
+    )
+
+
+    scheduler = (
+        torch.optim.lr_scheduler
+        .ReduceLROnPlateau(
+
+            optimizer,
+
+            mode="max",
+
+            factor=
+                LR_FACTOR,
+
+            patience=
+                LR_PATIENCE,
+
+            min_lr=
+                MIN_LEARNING_RATE
+        )
+    )
+
+
+    best_val_auc = -np.inf
+
+    best_val_loss = np.inf
+
+    best_epoch = 0
+
+    best_model_state = None
+
+    epochs_without_improvement = 0
+
+
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1
+    ):
+
+        train_result = train_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                train_loader,
+
+            criterion=
+                criterion,
+
+            optimizer=
+                optimizer,
+
+            device=
+                device_v6_z
+        )
+
+
+        (
+            val_result,
+            _,
+            _,
+            _
+
+        ) = evaluate_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                val_loader,
+
+            criterion=
+                criterion,
+
+            device=
+                device_v6_z
+        )
+
+
+        history_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "epoch":
+                    epoch,
+
+                "train_auc":
+                    train_result[
+                        "auc"
+                    ],
+
+                "val_auc":
+                    val_result[
+                        "auc"
+                    ],
+
+                "train_loss":
+                    train_result[
+                        "loss"
+                    ],
+
+                "val_loss":
+                    val_result[
+                        "loss"
+                    ]
+            }
+        )
+
+
+        auc_improved = (
+            val_result["auc"]
+            >
+            best_val_auc
+            +
+            1e-8
+        )
+
+
+        auc_tie_loss_improved = (
+
+            abs(
+                val_result["auc"]
+                -
+                best_val_auc
+            )
+            <=
+            1e-8
+
+            and
+
+            val_result["loss"]
+            <
+            best_val_loss
+        )
+
+
+        if (
+            auc_improved
+            or
+            auc_tie_loss_improved
+        ):
+
+            best_val_auc = float(
+                val_result["auc"]
+            )
+
+            best_val_loss = float(
+                val_result["loss"]
+            )
+
+            best_epoch = epoch
+
+            best_model_state = copy.deepcopy(
+                model.state_dict()
+            )
+
+            epochs_without_improvement = 0
+
+
+        else:
+
+            epochs_without_improvement += 1
+
+
+        scheduler.step(
+            val_result["auc"]
+        )
+
+
+        print(
+            f"Epoch {epoch:02d}"
+            f" | Train AUC {train_result['auc']:.4f}"
+            f" | Val AUC {val_result['auc']:.4f}"
+            f" | Best {best_epoch}"
+        )
+
+
+        if (
+            epochs_without_improvement
+            >=
+            EARLY_STOPPING_PATIENCE
+        ):
+
+            print(
+                "Early stopping."
+            )
+
+            break
+
+
+    model.load_state_dict(
+        best_model_state
+    )
+
+
+    (
+        best_train_result,
+        best_train_labels,
+        best_train_probs,
+        best_train_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            train_eval_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            device_v6_z
+    )
+
+
+    (
+        best_val_result,
+        best_val_labels,
+        best_val_probs,
+        best_val_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            val_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            device_v6_z
+    )
+
+
+    best_train_probs = np.asarray(
+        best_train_probs,
+        dtype=float
+    )
+
+
+    best_val_probs = np.asarray(
+        best_val_probs,
+        dtype=float
+    )
+
+
+    train_mean = float(
+        np.mean(
+            best_train_probs
+        )
+    )
+
+
+    train_sd = float(
+        np.std(
+            best_train_probs,
+            ddof=0
+        )
+    )
+
+
+    assert train_sd > 0
+
+
+    val_z_scores = (
+        best_val_probs
+        -
+        train_mean
+    ) / train_sd
+
+
+    fold_records.append(
+        {
+            "fold":
+                fold_number,
+
+            "best_epoch":
+                best_epoch,
+
+            "train_auc":
+                best_train_result[
+                    "auc"
+                ],
+
+            "val_auc":
+                best_val_result[
+                    "auc"
+                ],
+
+            "train_prob_mean":
+                train_mean,
+
+            "train_prob_sd":
+                train_sd,
+
+            "val_prob_mean":
+                np.mean(
+                    best_val_probs
+                ),
+
+            "val_prob_sd":
+                np.std(
+                    best_val_probs,
+                    ddof=0
+                )
+        }
+    )
+
+
+    for (
+        sample_id,
+        true_label,
+        raw_prob,
+        z_score
+
+    ) in zip(
+
+        best_val_ids,
+        best_val_labels,
+        best_val_probs,
+        val_z_scores
+    ):
+
+        oof_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "psam_IID":
+                    sample_id,
+
+                "true_label":
+                    int(
+                        true_label
+                    ),
+
+                "raw_probability":
+                    float(
+                        raw_prob
+                    ),
+
+                "oof_z_score":
+                    float(
+                        z_score
+                    )
+            }
+        )
+
+
+    print(
+        "\nBest epoch =",
+        best_epoch
+    )
+
+
+    print(
+        "Train AUC =",
+        round(
+            best_train_result[
+                "auc"
+            ],
+            4
+        )
+    )
+
+
+    print(
+        "Validation AUC =",
+        round(
+            best_val_result[
+                "auc"
+            ],
+            4
+        )
+    )
+
+
+    print(
+        "Train probability mean =",
+        train_mean
+    )
+
+
+    print(
+        "Train probability SD =",
+        train_sd
+    )
+
+
+    del model
+    del optimizer
+    del criterion
+
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+# ============================================================
+# STEP 12
+# CV summary
+# ============================================================
+
+fold_summary = pd.DataFrame(
+    fold_records
+)
+
+
+oof_df = pd.DataFrame(
+    oof_records
+)
+
+
+history_df = pd.DataFrame(
+    history_records
+)
+
+
+assert len(oof_df) == 120
+
+
+MEAN_TRAIN_AUC = (
+    fold_summary[
+        "train_auc"
+    ]
+    .mean()
+)
+
+
+SD_TRAIN_AUC = (
+    fold_summary[
+        "train_auc"
+    ]
+    .std(ddof=1)
+)
+
+
+MEAN_VAL_AUC = (
+    fold_summary[
+        "val_auc"
+    ]
+    .mean()
+)
+
+
+SD_VAL_AUC = (
+    fold_summary[
+        "val_auc"
+    ]
+    .std(ddof=1)
+)
+
+
+OOF_RAW_AUC = roc_auc_score(
+    oof_df[
+        "true_label"
+    ],
+    oof_df[
+        "raw_probability"
+    ]
+)
+
+
+OOF_Z_AUC = roc_auc_score(
+    oof_df[
+        "true_label"
+    ],
+    oof_df[
+        "oof_z_score"
+    ]
+)
+
+
+FINAL_EPOCHS = int(
+    np.median(
+        fold_summary[
+            "best_epoch"
+        ]
+    )
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 110
+)
+
+
+print(
+    "ORIGINAL V6 + Z-SCORE | 5-FOLD SUMMARY"
+)
+
+
+print(
+    "=" * 110
+)
+
+
+print(
+    fold_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+print(
+    "\nMean Train AUC =",
+    round(
+        MEAN_TRAIN_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_TRAIN_AUC,
+        4
+    )
+)
+
+
+print(
+    "Mean Validation AUC =",
+    round(
+        MEAN_VAL_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_VAL_AUC,
+        4
+    )
+)
+
+
+print(
+    "OOF Raw AUC =",
+    round(
+        OOF_RAW_AUC,
+        4
+    )
+)
+
+
+print(
+    "OOF Z-score AUC =",
+    round(
+        OOF_Z_AUC,
+        4
+    )
+)
+
+
+print(
+    "Median best epoch =",
+    FINAL_EPOCHS
+)
+
+
+# ============================================================
+# STEP 13
+# Select OOF Z threshold
+# ============================================================
+
+selected_z_row, z_threshold_table = (
+    select_z_threshold(
+
+        y_true=
+            oof_df[
+                "true_label"
+            ],
+
+        scores=
+            oof_df[
+                "oof_z_score"
+            ]
+    )
+)
+
+
+LOCKED_Z_THRESHOLD = float(
+    selected_z_row[
+        "Threshold"
+    ]
+)
+
+
+oof_selected_metrics = z_metrics(
+
+    y_true=
+        oof_df[
+            "true_label"
+        ],
+
+    scores=
+        oof_df[
+            "oof_z_score"
+        ],
+
+    threshold=
+        LOCKED_Z_THRESHOLD
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 110
+)
+
+
+print(
+    "OOF-SELECTED Z-SCORE THRESHOLD"
+)
+
+
+print(
+    "=" * 110
+)
+
+
+print(
+    "Threshold =",
+    LOCKED_Z_THRESHOLD
+)
+
+
+print(
+    "AUC =",
+    round(
+        oof_selected_metrics[
+            "AUC"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Accuracy =",
+    round(
+        oof_selected_metrics[
+            "Accuracy"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Sensitivity =",
+    round(
+        oof_selected_metrics[
+            "Sensitivity"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Specificity =",
+    round(
+        oof_selected_metrics[
+            "Specificity"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Balanced Accuracy =",
+    round(
+        oof_selected_metrics[
+            "Balanced_Accuracy"
+        ],
+        4
+    )
+)
+
+
+print(
+    "PPV =",
+    oof_selected_metrics[
+        "PPV"
+    ]
+)
+
+
+print(
+    "NPV =",
+    oof_selected_metrics[
+        "NPV"
+    ]
+)
+
+
+print(
+    "TP =",
+    oof_selected_metrics[
+        "TP"
+    ]
+)
+
+
+print(
+    "FN =",
+    oof_selected_metrics[
+        "FN"
+    ]
+)
+
+
+print(
+    "TN =",
+    oof_selected_metrics[
+        "TN"
+    ]
+)
+
+
+print(
+    "FP =",
+    oof_selected_metrics[
+        "FP"
+    ]
+)
+
+
+# ============================================================
+# STEP 14
+# Final model Train120
+# ============================================================
+
+set_v6_z_seed(
+    FINAL_MODEL_SEED
+)
+
+
+(
+    final_train_dataset,
+    final_train_eval_dataset,
+    final_test_dataset,
+
+    final_train_loader,
+    final_train_eval_loader,
+    final_test_loader
+
+) = build_final_dataloaders(
+
+    train_df=
+        v6_train120,
+
+    val_df=
+        v6_train120,
+
+    test_df=
+        v6_test30,
+
+    run_seed=
+        FINAL_MODEL_SEED,
+
+    batch_size=
+        BATCH_SIZE
+)
+
+
+set_v6_z_seed(
+    FINAL_MODEL_SEED
+)
+
+
+final_model = build_exp1_v6_model(
+
+    seed=
+        FINAL_MODEL_SEED,
+
+    device=
+        device_v6_z,
+
+    dropout_rate=
+        DROPOUT_RATE
+)
+
+
+(
+    final_criterion,
+    final_optimizer,
+    final_pos_weight
+
+) = build_training_objects(
+
+    model=
+        final_model,
+
+    train_df=
+        v6_train120,
+
+    device=
+        device_v6_z,
+
+    learning_rate=
+        LEARNING_RATE,
+
+    weight_decay=
+        WEIGHT_DECAY
+)
+
+
+for epoch in range(
+    1,
+    FINAL_EPOCHS + 1
+):
+
+    result = train_one_epoch(
+
+        model=
+            final_model,
+
+        data_loader=
+            final_train_loader,
+
+        criterion=
+            final_criterion,
+
+        optimizer=
+            final_optimizer,
+
+        device=
+            device_v6_z
+    )
+
+
+    print(
+        f"Final epoch "
+        f"{epoch}/{FINAL_EPOCHS}"
+        f" | Train AUC "
+        f"{result['auc']:.4f}"
+    )
+
+
+# ============================================================
+# STEP 15
+# Final Train120 reference
+# ============================================================
+
+(
+    final_train_result,
+    final_train_labels,
+    final_train_probs,
+    final_train_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_train_eval_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        device_v6_z
+)
+
+
+final_train_probs = np.asarray(
+    final_train_probs,
+    dtype=float
+)
+
+
+FINAL_TRAIN_MEAN = float(
+    np.mean(
+        final_train_probs
+    )
+)
+
+
+FINAL_TRAIN_SD = float(
+    np.std(
+        final_train_probs,
+        ddof=0
+    )
+)
+
+
+assert FINAL_TRAIN_SD > 0
+
+
+print(
+    "\nFinal Train120 probability mean =",
+    FINAL_TRAIN_MEAN
+)
+
+
+print(
+    "Final Train120 probability SD =",
+    FINAL_TRAIN_SD
+)
+
+
+# ============================================================
+# STEP 16
+# Test30 Z-score
+# ============================================================
+
+(
+    final_test_result,
+    final_test_labels,
+    final_test_probs,
+    final_test_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_test_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        device_v6_z
+)
+
+
+final_test_labels = np.asarray(
+    final_test_labels,
+    dtype=int
+)
+
+
+final_test_probs = np.asarray(
+    final_test_probs,
+    dtype=float
+)
+
+
+test_z_scores = (
+    final_test_probs
+    -
+    FINAL_TRAIN_MEAN
+) / FINAL_TRAIN_SD
+
+
+test_metrics = z_metrics(
+
+    y_true=
+        final_test_labels,
+
+    scores=
+        test_z_scores,
+
+    threshold=
+        LOCKED_Z_THRESHOLD
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 110
+)
+
+
+print(
+    "FINAL TEST30 | Z-SCORE"
+)
+
+
+print(
+    "=" * 110
+)
+
+
+print(
+    "Locked threshold =",
+    LOCKED_Z_THRESHOLD
+)
+
+
+print(
+    "Test Raw AUC =",
+    round(
+        roc_auc_score(
+            final_test_labels,
+            final_test_probs
+        ),
+        4
+    )
+)
+
+
+print(
+    "Test Z-score AUC =",
+    round(
+        test_metrics[
+            "AUC"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Accuracy =",
+    round(
+        test_metrics[
+            "Accuracy"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Sensitivity =",
+    round(
+        test_metrics[
+            "Sensitivity"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Specificity =",
+    round(
+        test_metrics[
+            "Specificity"
+        ],
+        4
+    )
+)
+
+
+print(
+    "Balanced Accuracy =",
+    round(
+        test_metrics[
+            "Balanced_Accuracy"
+        ],
+        4
+    )
+)
+
+
+print(
+    "PPV =",
+    test_metrics[
+        "PPV"
+    ]
+)
+
+
+print(
+    "NPV =",
+    test_metrics[
+        "NPV"
+    ]
+)
+
+
+print(
+    "TP =",
+    test_metrics[
+        "TP"
+    ]
+)
+
+
+print(
+    "FN =",
+    test_metrics[
+        "FN"
+    ]
+)
+
+
+print(
+    "TN =",
+    test_metrics[
+        "TN"
+    ]
+)
+
+
+print(
+    "FP =",
+    test_metrics[
+        "FP"
+    ]
+)
+
+
+# ============================================================
+# STEP 17
+# Final summary
+# ============================================================
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model":
+                "Original V6 + Z-score",
+
+            "Mean_Train_AUC":
+                MEAN_TRAIN_AUC,
+
+            "SD_Train_AUC":
+                SD_TRAIN_AUC,
+
+            "Mean_Validation_AUC":
+                MEAN_VAL_AUC,
+
+            "SD_Validation_AUC":
+                SD_VAL_AUC,
+
+            "OOF_Raw_AUC":
+                OOF_RAW_AUC,
+
+            "OOF_Z_AUC":
+                OOF_Z_AUC,
+
+            "Z_Threshold":
+                LOCKED_Z_THRESHOLD,
+
+            "OOF_Accuracy":
+                oof_selected_metrics[
+                    "Accuracy"
+                ],
+
+            "OOF_Sensitivity":
+                oof_selected_metrics[
+                    "Sensitivity"
+                ],
+
+            "OOF_Specificity":
+                oof_selected_metrics[
+                    "Specificity"
+                ],
+
+            "OOF_BA":
+                oof_selected_metrics[
+                    "Balanced_Accuracy"
+                ],
+
+            "OOF_PPV":
+                oof_selected_metrics[
+                    "PPV"
+                ],
+
+            "OOF_NPV":
+                oof_selected_metrics[
+                    "NPV"
+                ],
+
+            "Test_AUC":
+                test_metrics[
+                    "AUC"
+                ],
+
+            "Test_Accuracy":
+                test_metrics[
+                    "Accuracy"
+                ],
+
+            "Test_Sensitivity":
+                test_metrics[
+                    "Sensitivity"
+                ],
+
+            "Test_Specificity":
+                test_metrics[
+                    "Specificity"
+                ],
+
+            "Test_BA":
+                test_metrics[
+                    "Balanced_Accuracy"
+                ],
+
+            "Test_PPV":
+                test_metrics[
+                    "PPV"
+                ],
+
+            "Test_NPV":
+                test_metrics[
+                    "NPV"
+                ],
+
+            "TP":
+                test_metrics[
+                    "TP"
+                ],
+
+            "FN":
+                test_metrics[
+                    "FN"
+                ],
+
+            "TN":
+                test_metrics[
+                    "TN"
+                ],
+
+            "FP":
+                test_metrics[
+                    "FP"
+                ]
+        }
+    ]
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 150
+)
+
+
+print(
+    "ORIGINAL V6 + Z-SCORE | FINAL SUMMARY"
+)
+
+
+print(
+    "=" * 150
+)
+
+
+print(
+    final_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+# ============================================================
+# STEP 18
+# Save
+# ============================================================
+
+OUTPUT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_Original_NewSplit_Zscore"
+)
+
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+fold_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "V6_Zscore_fold_summary.csv",
+
+    index=False
+)
+
+
+oof_df.to_csv(
+    OUTPUT_DIR
+    /
+    "V6_Zscore_OOF_scores.csv",
+
+    index=False
+)
+
+
+z_threshold_table.to_csv(
+    OUTPUT_DIR
+    /
+    "V6_Zscore_threshold_candidates.csv",
+
+    index=False
+)
+
+
+final_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "V6_Zscore_Final_Summary.csv",
+
+    index=False
+)
+
+
+test_predictions = pd.DataFrame(
+    {
+        "psam_IID":
+            final_test_ids,
+
+        "true_label":
+            final_test_labels,
+
+        "raw_probability":
+            final_test_probs,
+
+        "z_score":
+            test_z_scores,
+
+        "predicted_label":
+            (
+                test_z_scores
+                >=
+                LOCKED_Z_THRESHOLD
+            ).astype(int)
+    }
+)
+
+
+test_predictions.to_csv(
+    OUTPUT_DIR
+    /
+    "V6_Zscore_Test30_predictions.csv",
+
+    index=False
+)
+
+
+print(
+    "\nResults saved to:"
+)
+
+
+print(
+    OUTPUT_DIR
+)
+
+
+#在-1~1的範圍中 找到z score表現最好的threshold:
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+from sklearn.metrics import roc_auc_score
+
+RESULT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_Original_NewSplit_Zscore"
+)
+
+OOF_PATH = (
+    RESULT_DIR
+    /
+    "V6_Zscore_OOF_scores.csv"
+)
+
+TEST_PATH = (
+    RESULT_DIR
+    /
+    "V6_Zscore_Test30_predictions.csv"
+)
+
+FOLD_PATH = (
+    RESULT_DIR
+    /
+    "V6_Zscore_fold_summary.csv"
+)
+
+oof_df = pd.read_csv(
+    OOF_PATH
+)
+
+test_df = pd.read_csv(
+    TEST_PATH
+)
+
+fold_summary = pd.read_csv(
+    FOLD_PATH
+)
+
+assert len(oof_df) == 120
+assert len(test_df) == 30
+
+assert {
+    "true_label",
+    "oof_z_score"
+}.issubset(oof_df.columns)
+
+assert {
+    "true_label",
+    "z_score"
+}.issubset(test_df.columns)
+
+print(
+    "OOF Z-score range =",
+    oof_df["oof_z_score"].min(),
+    "to",
+    oof_df["oof_z_score"].max()
+)
+
+print(
+    "Test Z-score range =",
+    test_df["z_score"].min(),
+    "to",
+    test_df["z_score"].max()
+)
+
+
+def threshold_metrics(
+    y_true,
+    scores,
+    threshold
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+    y_pred = (
+        scores
+        >=
+        threshold
+    ).astype(int)
+
+    tp = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    fn = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    tn = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    fp = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    sensitivity = (
+        tp / (tp + fn)
+        if (tp + fn) > 0
+        else np.nan
+    )
+
+    specificity = (
+        tn / (tn + fp)
+        if (tn + fp) > 0
+        else np.nan
+    )
+
+    accuracy = (
+        (tp + tn)
+        /
+        len(y_true)
+    )
+
+    balanced_accuracy = (
+        sensitivity
+        +
+        specificity
+    ) / 2
+
+    ppv = (
+        tp / (tp + fp)
+        if (tp + fp) > 0
+        else np.nan
+    )
+
+    npv = (
+        tn / (tn + fn)
+        if (tn + fn) > 0
+        else np.nan
+    )
+
+    auc = roc_auc_score(
+        y_true,
+        scores
+    )
+
+    return {
+        "Threshold":
+            float(threshold),
+
+        "AUC":
+            auc,
+
+        "Accuracy":
+            accuracy,
+
+        "Sensitivity":
+            sensitivity,
+
+        "Specificity":
+            specificity,
+
+        "Balanced_Accuracy":
+            balanced_accuracy,
+
+        "PPV":
+            ppv,
+
+        "NPV":
+            npv,
+
+        "TP":
+            tp,
+
+        "FN":
+            fn,
+
+        "TN":
+            tn,
+
+        "FP":
+            fp
+    }
+
+
+oof_scores = np.asarray(
+    oof_df["oof_z_score"],
+    dtype=float
+)
+
+oof_labels = np.asarray(
+    oof_df["true_label"],
+    dtype=int
+)
+
+unique_scores = np.sort(
+    np.unique(
+        oof_scores
+    )
+)
+
+midpoints = (
+    unique_scores[:-1]
+    +
+    unique_scores[1:]
+) / 2
+
+candidate_thresholds = midpoints[
+    (midpoints >= -1.0)
+    &
+    (midpoints <= 1.0)
+]
+
+candidate_thresholds = np.unique(
+    np.concatenate(
+        [
+            [-1.0],
+            candidate_thresholds,
+            [0.0],
+            [1.0]
+        ]
+    )
+)
+
+threshold_records = []
+
+for threshold in candidate_thresholds:
+
+    metrics = threshold_metrics(
+
+        y_true=
+            oof_labels,
+
+        scores=
+            oof_scores,
+
+        threshold=
+            threshold
+    )
+
+    metrics[
+        "Sens_Spec_Difference"
+    ] = abs(
+        metrics["Sensitivity"]
+        -
+        metrics["Specificity"]
+    )
+
+    threshold_records.append(
+        metrics
+    )
+
+threshold_candidates = pd.DataFrame(
+    threshold_records
+)
+
+max_ba = (
+    threshold_candidates[
+        "Balanced_Accuracy"
+    ]
+    .max()
+)
+
+best_candidates = (
+    threshold_candidates[
+        np.isclose(
+            threshold_candidates[
+                "Balanced_Accuracy"
+            ],
+            max_ba,
+            atol=1e-12
+        )
+    ]
+    .copy()
+)
+
+min_difference = (
+    best_candidates[
+        "Sens_Spec_Difference"
+    ]
+    .min()
+)
+
+best_candidates = (
+    best_candidates[
+        np.isclose(
+            best_candidates[
+                "Sens_Spec_Difference"
+            ],
+            min_difference,
+            atol=1e-12
+        )
+    ]
+    .sort_values(
+        "Threshold"
+    )
+    .reset_index(
+        drop=True
+    )
+)
+
+selected_row = (
+    best_candidates
+    .iloc[
+        len(best_candidates) // 2
+    ]
+)
+
+SELECTED_THRESHOLD = float(
+    selected_row["Threshold"]
+)
+
+BASELINE_THRESHOLD = 0.0
+
+print(
+    "\nSelected Z-score threshold =",
+    SELECTED_THRESHOLD
+)
+
+print(
+    "OOF Balanced Accuracy =",
+    round(
+        selected_row[
+            "Balanced_Accuracy"
+        ],
+        4
+    )
+)
+
+print(
+    "OOF Sensitivity =",
+    round(
+        selected_row[
+            "Sensitivity"
+        ],
+        4
+    )
+)
+
+print(
+    "OOF Specificity =",
+    round(
+        selected_row[
+            "Specificity"
+        ],
+        4
+    )
+)
+
+print(
+    "OOF PPV =",
+    round(
+        selected_row[
+            "PPV"
+        ],
+        4
+    )
+)
+
+print(
+    "OOF NPV =",
+    round(
+        selected_row[
+            "NPV"
+        ],
+        4
+    )
+)
+
+
+comparison_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold_type, threshold in [
+
+        (
+            "Selected",
+            SELECTED_THRESHOLD
+        ),
+
+        (
+            "Baseline 0",
+            BASELINE_THRESHOLD
+        )
+
+    ]:
+
+        metrics = threshold_metrics(
+
+            y_true=
+                labels,
+
+            scores=
+                scores,
+
+            threshold=
+                threshold
+        )
+
+        comparison_records.append(
+            {
+                "Dataset":
+                    dataset_name,
+
+                "Threshold_Type":
+                    threshold_type,
+
+                "Threshold":
+                    threshold,
+
+                "AUC":
+                    metrics["AUC"],
+
+                "Accuracy":
+                    metrics["Accuracy"],
+
+                "Sensitivity":
+                    metrics["Sensitivity"],
+
+                "Specificity":
+                    metrics["Specificity"],
+
+                "Balanced_Accuracy":
+                    metrics["Balanced_Accuracy"],
+
+                "PPV":
+                    metrics["PPV"],
+
+                "NPV":
+                    metrics["NPV"],
+
+                "TP":
+                    metrics["TP"],
+
+                "FN":
+                    metrics["FN"],
+
+                "TN":
+                    metrics["TN"],
+
+                "FP":
+                    metrics["FP"]
+            }
+        )
+
+comparison_df = pd.DataFrame(
+    comparison_records
+)
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "SELECTED Z THRESHOLD vs BASELINE Z = 0"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    comparison_df
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+PLOT_THRESHOLDS = np.arange(
+    -1.0,
+    1.0001,
+    0.02
+)
+
+PLOT_THRESHOLDS = np.unique(
+    np.concatenate(
+        [
+            PLOT_THRESHOLDS,
+            [
+                SELECTED_THRESHOLD,
+                BASELINE_THRESHOLD
+            ]
+        ]
+    )
+)
+
+PLOT_THRESHOLDS.sort()
+
+curve_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold in PLOT_THRESHOLDS:
+
+        metrics = threshold_metrics(
+
+            y_true=
+                labels,
+
+            scores=
+                scores,
+
+            threshold=
+                threshold
+        )
+
+        curve_records.append(
+            {
+                "Dataset":
+                    dataset_name,
+
+                "Threshold":
+                    threshold,
+
+                "Sensitivity":
+                    metrics["Sensitivity"],
+
+                "Specificity":
+                    metrics["Specificity"],
+
+                "PPV":
+                    metrics["PPV"],
+
+                "NPV":
+                    metrics["NPV"],
+
+                "Balanced_Accuracy":
+                    metrics["Balanced_Accuracy"]
+            }
+        )
+
+curve_df = pd.DataFrame(
+    curve_records
+)
+
+oof_curve = (
+    curve_df[
+        curve_df["Dataset"]
+        ==
+        "Validation OOF"
+    ]
+    .copy()
+)
+
+test_curve = (
+    curve_df[
+        curve_df["Dataset"]
+        ==
+        "Test30"
+    ]
+    .copy()
+)
+
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(14, 5),
+    sharey=True
+)
+
+for ax, current_df, title in [
+
+    (
+        axes[0],
+        oof_curve,
+        "Validation OOF"
+    ),
+
+    (
+        axes[1],
+        test_curve,
+        "Test30"
+    )
+
+]:
+
+    ax.plot(
+        current_df["Threshold"],
+        current_df["Sensitivity"],
+        marker="o",
+        markevery=5,
+        label="Sensitivity"
+    )
+
+    ax.plot(
+        current_df["Threshold"],
+        current_df["Specificity"],
+        marker="o",
+        markevery=5,
+        label="Specificity"
+    )
+
+    ax.plot(
+        current_df["Threshold"],
+        current_df["PPV"],
+        marker="o",
+        markevery=5,
+        label="PPV"
+    )
+
+    ax.plot(
+        current_df["Threshold"],
+        current_df["NPV"],
+        marker="o",
+        markevery=5,
+        label="NPV"
+    )
+
+    ax.axvline(
+        SELECTED_THRESHOLD,
+        linestyle="--",
+        linewidth=1.5,
+        label=(
+            "Selected threshold = "
+            f"{SELECTED_THRESHOLD:.3f}"
+        )
+    )
+
+    ax.axvline(
+        BASELINE_THRESHOLD,
+        linestyle=":",
+        linewidth=1.5,
+        label="Baseline threshold = 0.000"
+    )
+
+    ax.set_title(
+        title
+    )
+
+    ax.set_xlabel(
+        "Z-score Threshold"
+    )
+
+    ax.set_xlim(
+        -1.02,
+        1.02
+    )
+
+    ax.set_ylim(
+        0,
+        1.05
+    )
+
+    ax.set_xticks(
+        np.arange(
+            -1,
+            1.01,
+            0.2
+        )
+    )
+
+    ax.grid(
+        alpha=0.3
+    )
+
+axes[0].set_ylabel(
+    "Performance Metric"
+)
+
+handles, labels = (
+    axes[0]
+    .get_legend_handles_labels()
+)
+
+fig.legend(
+    handles,
+    labels,
+    loc="lower center",
+    ncol=6,
+    bbox_to_anchor=(
+        0.5,
+        -0.03
+    )
+)
+
+plt.tight_layout(
+    rect=[
+        0,
+        0.08,
+        1,
+        1
+    ]
+)
+
+PLOT_PATH = (
+    RESULT_DIR
+    /
+    "V6_Zscore_Threshold_Minus1_to_1.png"
+)
+
+plt.savefig(
+    PLOT_PATH,
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+MEAN_TRAIN_AUC = (
+    fold_summary[
+        "train_auc"
+    ]
+    .mean()
+)
+
+SD_TRAIN_AUC = (
+    fold_summary[
+        "train_auc"
+    ]
+    .std(ddof=1)
+)
+
+MEAN_VAL_AUC = (
+    fold_summary[
+        "val_auc"
+    ]
+    .mean()
+)
+
+SD_VAL_AUC = (
+    fold_summary[
+        "val_auc"
+    ]
+    .std(ddof=1)
+)
+
+oof_selected = threshold_metrics(
+
+    y_true=
+        oof_df["true_label"],
+
+    scores=
+        oof_df["oof_z_score"],
+
+    threshold=
+        SELECTED_THRESHOLD
+)
+
+test_selected = threshold_metrics(
+
+    y_true=
+        test_df["true_label"],
+
+    scores=
+        test_df["z_score"],
+
+    threshold=
+        SELECTED_THRESHOLD
+)
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model":
+                "Original V6 + Z-score",
+
+            "Threshold_Range":
+                "-1 to 1",
+
+            "Selected_Threshold":
+                SELECTED_THRESHOLD,
+
+            "Mean_Train_AUC":
+                MEAN_TRAIN_AUC,
+
+            "SD_Train_AUC":
+                SD_TRAIN_AUC,
+
+            "Mean_Validation_AUC":
+                MEAN_VAL_AUC,
+
+            "SD_Validation_AUC":
+                SD_VAL_AUC,
+
+            "OOF_Z_AUC":
+                oof_selected["AUC"],
+
+            "OOF_Accuracy":
+                oof_selected["Accuracy"],
+
+            "OOF_Sensitivity":
+                oof_selected["Sensitivity"],
+
+            "OOF_Specificity":
+                oof_selected["Specificity"],
+
+            "OOF_BA":
+                oof_selected["Balanced_Accuracy"],
+
+            "OOF_PPV":
+                oof_selected["PPV"],
+
+            "OOF_NPV":
+                oof_selected["NPV"],
+
+            "Test_Z_AUC":
+                test_selected["AUC"],
+
+            "Test_Accuracy":
+                test_selected["Accuracy"],
+
+            "Test_Sensitivity":
+                test_selected["Sensitivity"],
+
+            "Test_Specificity":
+                test_selected["Specificity"],
+
+            "Test_BA":
+                test_selected["Balanced_Accuracy"],
+
+            "Test_PPV":
+                test_selected["PPV"],
+
+            "Test_NPV":
+                test_selected["NPV"],
+
+            "TP":
+                test_selected["TP"],
+
+            "FN":
+                test_selected["FN"],
+
+            "TN":
+                test_selected["TN"],
+
+            "FP":
+                test_selected["FP"]
+        }
+    ]
+)
+
+print(
+    "\n"
+    +
+    "=" * 160
+)
+
+print(
+    "FINAL Z-SCORE THRESHOLD SUMMARY"
+)
+
+print(
+    "=" * 160
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+threshold_candidates.to_csv(
+    RESULT_DIR
+    /
+    "V6_Zscore_ThresholdCandidates_Minus1_to_1.csv",
+    index=False
+)
+
+comparison_df.to_csv(
+    RESULT_DIR
+    /
+    "V6_Zscore_Selected_vs_Zero.csv",
+    index=False
+)
+
+curve_df.to_csv(
+    RESULT_DIR
+    /
+    "V6_Zscore_ThresholdCurve_Minus1_to_1.csv",
+    index=False
+)
+
+final_summary.to_csv(
+    RESULT_DIR
+    /
+    "V6_Zscore_Final_Threshold_Summary_Minus1_to_1.csv",
+    index=False
+)
+
+print(
+    "\nSaved plot:"
+)
+
+print(
+    PLOT_PATH
+)
+
+#------------------------threshold -0.2637固定----------------------------#
+#small channel+kernal size
+
+#small channel+kernal size 且threshold相同的情況下
+#threshold:  -0.2637 
+import copy
+import gc
+import random
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import torch
+import torch.nn as nn
+
+from sklearn.metrics import roc_auc_score
+
+
+DEVICE = torch.device(
+    "mps"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    else "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+print("Device =", DEVICE)
+
+
+FIXED_Z_THRESHOLD = -0.26371164315112816
+
+BATCH_SIZE = 2
+DROPOUT_RATE = 0.5
+LEARNING_RATE = 5e-5
+WEIGHT_DECAY = 1e-3
+MAX_EPOCHS = 30
+EARLY_STOPPING_PATIENCE = 5
+LR_PATIENCE = 2
+LR_FACTOR = 0.5
+MIN_LEARNING_RATE = 1e-6
+
+MODEL_SEED_BASE = 20260924
+FINAL_MODEL_SEED = 20261006
+
+
+required_objects = [
+    "v6_train120",
+    "v6_test30",
+    "build_final_dataloaders",
+    "build_training_objects",
+    "train_one_epoch",
+    "evaluate_one_epoch"
+]
+
+missing_objects = [
+    x
+    for x in required_objects
+    if x not in globals()
+]
+
+assert len(missing_objects) == 0, (
+    f"缺少 notebook 物件：{missing_objects}"
+)
+
+
+def set_seed(seed):
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+class SmallLocalBasicBlock(nn.Module):
+
+    expansion = 1
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        stride=1,
+        num_groups=32
+    ):
+
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.conv2 = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False
+        )
+
+        self.bn2 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        if (
+            stride == 2
+            and
+            in_channels == out_channels
+        ):
+
+            self.downsample = nn.AvgPool2d(
+                kernel_size=2,
+                stride=2
+            )
+
+        elif (
+            stride != 1
+            or
+            in_channels != out_channels
+        ):
+
+            self.downsample = nn.Sequential(
+
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False
+                ),
+
+                nn.GroupNorm(
+                    num_groups,
+                    out_channels
+                )
+            )
+
+        else:
+
+            self.downsample = nn.Identity()
+
+
+    def forward(self, x):
+
+        identity = self.downsample(
+            x
+        )
+
+        out = self.conv1(
+            x
+        )
+
+        out = self.bn1(
+            out
+        )
+
+        out = self.relu(
+            out
+        )
+
+        out = self.conv2(
+            out
+        )
+
+        out = self.bn2(
+            out
+        )
+
+        out = out + identity
+
+        out = self.relu(
+            out
+        )
+
+        return out
+
+
+class V6SmallLocalResNet18(nn.Module):
+
+    def __init__(
+        self,
+        dropout_rate=0.5
+    ):
+
+        super().__init__()
+
+        self.in_channels = 32
+
+        self.conv1 = nn.Conv2d(
+            3,
+            32,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            32,
+            32
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.maxpool = nn.Identity()
+
+        self.layer1 = self._make_layer(
+            out_channels=32,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer2 = self._make_layer(
+            out_channels=64,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer3 = self._make_layer(
+            out_channels=128,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer4 = self._make_layer(
+            out_channels=256,
+            blocks=2,
+            stride=2
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d(
+            (1, 1)
+        )
+
+        self.fc = nn.Sequential(
+
+            nn.Dropout(
+                dropout_rate
+            ),
+
+            nn.Linear(
+                256,
+                1
+            )
+        )
+
+
+    def _make_layer(
+        self,
+        out_channels,
+        blocks,
+        stride
+    ):
+
+        layers = [
+
+            SmallLocalBasicBlock(
+                self.in_channels,
+                out_channels,
+                stride=stride
+            )
+        ]
+
+        self.in_channels = out_channels
+
+        for _ in range(
+            1,
+            blocks
+        ):
+
+            layers.append(
+
+                SmallLocalBasicBlock(
+                    self.in_channels,
+                    out_channels,
+                    stride=1
+                )
+            )
+
+        return nn.Sequential(
+            *layers
+        )
+
+
+    def forward(self, x):
+
+        x = self.conv1(
+            x
+        )
+
+        x = self.bn1(
+            x
+        )
+
+        x = self.relu(
+            x
+        )
+
+        x = self.maxpool(
+            x
+        )
+
+        x = self.layer1(
+            x
+        )
+
+        x = self.layer2(
+            x
+        )
+
+        x = self.layer3(
+            x
+        )
+
+        x = self.layer4(
+            x
+        )
+
+        x = self.avgpool(
+            x
+        )
+
+        x = torch.flatten(
+            x,
+            1
+        )
+
+        x = self.fc(
+            x
+        )
+
+        return x
+
+
+def build_v6_small_local_model(
+    seed,
+    device,
+    dropout_rate=0.5
+):
+
+    set_seed(
+        seed
+    )
+
+    model = V6SmallLocalResNet18(
+        dropout_rate=
+            dropout_rate
+    )
+
+    model = model.to(
+        device
+    )
+
+    return model
+
+
+def calculate_metrics(
+    y_true,
+    scores,
+    threshold
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+    y_pred = (
+        scores
+        >=
+        threshold
+    ).astype(int)
+
+    tp = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    fn = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    tn = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    fp = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    sensitivity = (
+        tp / (tp + fn)
+        if (tp + fn) > 0
+        else np.nan
+    )
+
+    specificity = (
+        tn / (tn + fp)
+        if (tn + fp) > 0
+        else np.nan
+    )
+
+    accuracy = (
+        (tp + tn)
+        /
+        len(y_true)
+    )
+
+    balanced_accuracy = (
+        sensitivity
+        +
+        specificity
+    ) / 2
+
+    ppv = (
+        tp / (tp + fp)
+        if (tp + fp) > 0
+        else np.nan
+    )
+
+    npv = (
+        tn / (tn + fn)
+        if (tn + fn) > 0
+        else np.nan
+    )
+
+    auc = roc_auc_score(
+        y_true,
+        scores
+    )
+
+    return {
+        "AUC":
+            auc,
+
+        "Accuracy":
+            accuracy,
+
+        "Sensitivity":
+            sensitivity,
+
+        "Specificity":
+            specificity,
+
+        "Balanced_Accuracy":
+            balanced_accuracy,
+
+        "PPV":
+            ppv,
+
+        "NPV":
+            npv,
+
+        "TP":
+            tp,
+
+        "FN":
+            fn,
+
+        "TN":
+            tn,
+
+        "FP":
+            fp
+    }
+
+
+qc_model = build_v6_small_local_model(
+    seed=20261006,
+    device=DEVICE,
+    dropout_rate=DROPOUT_RATE
+)
+
+print("\nArchitecture QC")
+print("Stem =", qc_model.conv1)
+print("Stem norm =", qc_model.bn1)
+print("MaxPool =", qc_model.maxpool)
+print("Layer1 first block =", qc_model.layer1[0])
+print("GAP =", qc_model.avgpool)
+print("Classifier =", qc_model.fc)
+
+print(
+    "Parameters =",
+    sum(
+        p.numel()
+        for p in qc_model.parameters()
+    )
+)
+
+del qc_model
+gc.collect()
+
+
+fold_records = []
+oof_records = []
+history_records = []
+
+
+for fold_number in range(
+    1,
+    6
+):
+
+    seed = (
+        MODEL_SEED_BASE
+        +
+        fold_number
+    )
+
+    set_seed(
+        seed
+    )
+
+    print(
+        "\n"
+        +
+        "=" * 110
+    )
+
+    print(
+        f"SMALL CHANNEL + KERNEL SIZE + Z-SCORE | FOLD {fold_number}/5"
+    )
+
+    print(
+        "=" * 110
+    )
+
+    fold_train_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            !=
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    fold_val_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            ==
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    assert len(fold_train_df) == 96
+    assert len(fold_val_df) == 24
+
+    (
+        train_dataset,
+        train_eval_dataset,
+        val_dataset,
+        train_loader,
+        train_eval_loader,
+        val_loader
+
+    ) = build_final_dataloaders(
+
+        train_df=
+            fold_train_df,
+
+        val_df=
+            fold_train_df,
+
+        test_df=
+            fold_val_df,
+
+        run_seed=
+            seed,
+
+        batch_size=
+            BATCH_SIZE
+    )
+
+    model = build_v6_small_local_model(
+
+        seed=
+            seed,
+
+        device=
+            DEVICE,
+
+        dropout_rate=
+            DROPOUT_RATE
+    )
+
+    (
+        criterion,
+        optimizer,
+        pos_weight
+
+    ) = build_training_objects(
+
+        model=
+            model,
+
+        train_df=
+            fold_train_df,
+
+        device=
+            DEVICE,
+
+        learning_rate=
+            LEARNING_RATE,
+
+        weight_decay=
+            WEIGHT_DECAY
+    )
+
+    scheduler = (
+        torch.optim.lr_scheduler
+        .ReduceLROnPlateau(
+
+            optimizer,
+
+            mode="max",
+
+            factor=
+                LR_FACTOR,
+
+            patience=
+                LR_PATIENCE,
+
+            min_lr=
+                MIN_LEARNING_RATE
+        )
+    )
+
+    best_val_auc = -np.inf
+    best_val_loss = np.inf
+    best_epoch = 0
+    best_state = None
+    no_improve = 0
+
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1
+    ):
+
+        train_result = train_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                train_loader,
+
+            criterion=
+                criterion,
+
+            optimizer=
+                optimizer,
+
+            device=
+                DEVICE
+        )
+
+        (
+            val_result,
+            _,
+            _,
+            _
+
+        ) = evaluate_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                val_loader,
+
+            criterion=
+                criterion,
+
+            device=
+                DEVICE
+        )
+
+        history_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "epoch":
+                    epoch,
+
+                "train_auc":
+                    train_result["auc"],
+
+                "val_auc":
+                    val_result["auc"],
+
+                "train_loss":
+                    train_result["loss"],
+
+                "val_loss":
+                    val_result["loss"]
+            }
+        )
+
+        better_auc = (
+            val_result["auc"]
+            >
+            best_val_auc
+            +
+            1e-8
+        )
+
+        same_auc_better_loss = (
+            abs(
+                val_result["auc"]
+                -
+                best_val_auc
+            )
+            <=
+            1e-8
+            and
+            val_result["loss"]
+            <
+            best_val_loss
+        )
+
+        if (
+            better_auc
+            or
+            same_auc_better_loss
+        ):
+
+            best_val_auc = float(
+                val_result["auc"]
+            )
+
+            best_val_loss = float(
+                val_result["loss"]
+            )
+
+            best_epoch = epoch
+
+            best_state = copy.deepcopy(
+                model.state_dict()
+            )
+
+            no_improve = 0
+
+        else:
+
+            no_improve += 1
+
+        scheduler.step(
+            val_result["auc"]
+        )
+
+        print(
+            f"Epoch {epoch:02d}"
+            f" | Train AUC {train_result['auc']:.4f}"
+            f" | Val AUC {val_result['auc']:.4f}"
+            f" | Best {best_epoch}"
+        )
+
+        if (
+            no_improve
+            >=
+            EARLY_STOPPING_PATIENCE
+        ):
+
+            print(
+                "Early stopping."
+            )
+
+            break
+
+    model.load_state_dict(
+        best_state
+    )
+
+    (
+        best_train_result,
+        best_train_labels,
+        best_train_probs,
+        best_train_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            train_eval_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    (
+        best_val_result,
+        best_val_labels,
+        best_val_probs,
+        best_val_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            val_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    best_train_probs = np.asarray(
+        best_train_probs,
+        dtype=float
+    )
+
+    best_val_probs = np.asarray(
+        best_val_probs,
+        dtype=float
+    )
+
+    train_mean = float(
+        np.mean(
+            best_train_probs
+        )
+    )
+
+    train_sd = float(
+        np.std(
+            best_train_probs,
+            ddof=0
+        )
+    )
+
+    assert train_sd > 0
+
+    val_z_scores = (
+        best_val_probs
+        -
+        train_mean
+    ) / train_sd
+
+    fold_records.append(
+        {
+            "fold":
+                fold_number,
+
+            "best_epoch":
+                best_epoch,
+
+            "train_auc":
+                best_train_result["auc"],
+
+            "val_auc":
+                best_val_result["auc"],
+
+            "train_prob_mean":
+                train_mean,
+
+            "train_prob_sd":
+                train_sd,
+
+            "val_prob_mean":
+                np.mean(
+                    best_val_probs
+                ),
+
+            "val_prob_sd":
+                np.std(
+                    best_val_probs,
+                    ddof=0
+                )
+        }
+    )
+
+    for (
+        sample_id,
+        true_label,
+        raw_probability,
+        z_score
+
+    ) in zip(
+
+        best_val_ids,
+        best_val_labels,
+        best_val_probs,
+        val_z_scores
+    ):
+
+        oof_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "psam_IID":
+                    sample_id,
+
+                "true_label":
+                    int(
+                        true_label
+                    ),
+
+                "raw_probability":
+                    float(
+                        raw_probability
+                    ),
+
+                "oof_z_score":
+                    float(
+                        z_score
+                    )
+            }
+        )
+
+    print(
+        "\nBest epoch =",
+        best_epoch
+    )
+
+    print(
+        "Train AUC =",
+        round(
+            best_train_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Validation AUC =",
+        round(
+            best_val_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Train probability mean =",
+        train_mean
+    )
+
+    print(
+        "Train probability SD =",
+        train_sd
+    )
+
+    del model
+    del optimizer
+    del criterion
+
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+fold_summary = pd.DataFrame(
+    fold_records
+)
+
+oof_df_small_kernel = pd.DataFrame(
+    oof_records
+)
+
+history_df = pd.DataFrame(
+    history_records
+)
+
+assert len(
+    oof_df_small_kernel
+) == 120
+
+
+MEAN_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .mean()
+)
+
+SD_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .std(ddof=1)
+)
+
+MEAN_VAL_AUC = (
+    fold_summary["val_auc"]
+    .mean()
+)
+
+SD_VAL_AUC = (
+    fold_summary["val_auc"]
+    .std(ddof=1)
+)
+
+OOF_RAW_AUC = roc_auc_score(
+    oof_df_small_kernel["true_label"],
+    oof_df_small_kernel["raw_probability"]
+)
+
+OOF_Z_AUC = roc_auc_score(
+    oof_df_small_kernel["true_label"],
+    oof_df_small_kernel["oof_z_score"]
+)
+
+OOF_METRICS = calculate_metrics(
+
+    y_true=
+        oof_df_small_kernel["true_label"],
+
+    scores=
+        oof_df_small_kernel["oof_z_score"],
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+FINAL_EPOCHS = int(
+    np.median(
+        fold_summary["best_epoch"]
+    )
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "SMALL CHANNEL + KERNEL SIZE + Z-SCORE | 5-FOLD SUMMARY"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    fold_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+print(
+    "\nMean Train AUC =",
+    round(
+        MEAN_TRAIN_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_TRAIN_AUC,
+        4
+    )
+)
+
+print(
+    "Mean Validation AUC =",
+    round(
+        MEAN_VAL_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_VAL_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Raw AUC =",
+    round(
+        OOF_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Z-score AUC =",
+    round(
+        OOF_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "OOF Accuracy =",
+    round(
+        OOF_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF Sensitivity =",
+    round(
+        OOF_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "OOF Specificity =",
+    round(
+        OOF_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "OOF Balanced Accuracy =",
+    round(
+        OOF_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF PPV =",
+    OOF_METRICS["PPV"]
+)
+
+print(
+    "OOF NPV =",
+    OOF_METRICS["NPV"]
+)
+
+print(
+    "OOF TP =",
+    OOF_METRICS["TP"]
+)
+
+print(
+    "OOF FN =",
+    OOF_METRICS["FN"]
+)
+
+print(
+    "OOF TN =",
+    OOF_METRICS["TN"]
+)
+
+print(
+    "OOF FP =",
+    OOF_METRICS["FP"]
+)
+
+print(
+    "Median best epoch =",
+    FINAL_EPOCHS
+)
+
+
+set_seed(
+    FINAL_MODEL_SEED
+)
+
+(
+    final_train_dataset,
+    final_train_eval_dataset,
+    final_test_dataset,
+    final_train_loader,
+    final_train_eval_loader,
+    final_test_loader
+
+) = build_final_dataloaders(
+
+    train_df=
+        v6_train120,
+
+    val_df=
+        v6_train120,
+
+    test_df=
+        v6_test30,
+
+    run_seed=
+        FINAL_MODEL_SEED,
+
+    batch_size=
+        BATCH_SIZE
+)
+
+final_model = build_v6_small_local_model(
+
+    seed=
+        FINAL_MODEL_SEED,
+
+    device=
+        DEVICE,
+
+    dropout_rate=
+        DROPOUT_RATE
+)
+
+(
+    final_criterion,
+    final_optimizer,
+    final_pos_weight
+
+) = build_training_objects(
+
+    model=
+        final_model,
+
+    train_df=
+        v6_train120,
+
+    device=
+        DEVICE,
+
+    learning_rate=
+        LEARNING_RATE,
+
+    weight_decay=
+        WEIGHT_DECAY
+)
+
+for epoch in range(
+    1,
+    FINAL_EPOCHS + 1
+):
+
+    final_train_epoch_result = train_one_epoch(
+
+        model=
+            final_model,
+
+        data_loader=
+            final_train_loader,
+
+        criterion=
+            final_criterion,
+
+        optimizer=
+            final_optimizer,
+
+        device=
+            DEVICE
+    )
+
+    print(
+        f"Final epoch {epoch}/{FINAL_EPOCHS}"
+        f" | Train AUC "
+        f"{final_train_epoch_result['auc']:.4f}"
+    )
+
+
+(
+    final_train_result,
+    final_train_labels,
+    final_train_probs,
+    final_train_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_train_eval_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_train_probs = np.asarray(
+    final_train_probs,
+    dtype=float
+)
+
+FINAL_TRAIN_MEAN = float(
+    np.mean(
+        final_train_probs
+    )
+)
+
+FINAL_TRAIN_SD = float(
+    np.std(
+        final_train_probs,
+        ddof=0
+    )
+)
+
+assert FINAL_TRAIN_SD > 0
+
+
+(
+    final_test_result,
+    final_test_labels,
+    final_test_probs,
+    final_test_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_test_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_test_labels = np.asarray(
+    final_test_labels,
+    dtype=int
+)
+
+final_test_probs = np.asarray(
+    final_test_probs,
+    dtype=float
+)
+
+test_z_scores = (
+    final_test_probs
+    -
+    FINAL_TRAIN_MEAN
+) / FINAL_TRAIN_SD
+
+TEST_RAW_AUC = roc_auc_score(
+    final_test_labels,
+    final_test_probs
+)
+
+TEST_Z_AUC = roc_auc_score(
+    final_test_labels,
+    test_z_scores
+)
+
+TEST_METRICS = calculate_metrics(
+
+    y_true=
+        final_test_labels,
+
+    scores=
+        test_z_scores,
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+
+print(
+    "\nFinal Train120 probability mean =",
+    FINAL_TRAIN_MEAN
+)
+
+print(
+    "Final Train120 probability SD =",
+    FINAL_TRAIN_SD
+)
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "FINAL TEST30 | SMALL CHANNEL + KERNEL SIZE + Z-SCORE"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "Test Raw AUC =",
+    round(
+        TEST_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "Test Z-score AUC =",
+    round(
+        TEST_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Accuracy =",
+    round(
+        TEST_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "Sensitivity =",
+    round(
+        TEST_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "Specificity =",
+    round(
+        TEST_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "Balanced Accuracy =",
+    round(
+        TEST_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "PPV =",
+    TEST_METRICS["PPV"]
+)
+
+print(
+    "NPV =",
+    TEST_METRICS["NPV"]
+)
+
+print(
+    "TP =",
+    TEST_METRICS["TP"]
+)
+
+print(
+    "FN =",
+    TEST_METRICS["FN"]
+)
+
+print(
+    "TN =",
+    TEST_METRICS["TN"]
+)
+
+print(
+    "FP =",
+    TEST_METRICS["FP"]
+)
+
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model":
+                "Small Channel + Kernel Size",
+
+            "Channels":
+                "32/64/128/256",
+
+            "Stem":
+                "3x3 stride1",
+
+            "Z_score":
+                "Yes",
+
+            "Z_Threshold":
+                FIXED_Z_THRESHOLD,
+
+            "Mean_Train_AUC":
+                MEAN_TRAIN_AUC,
+
+            "SD_Train_AUC":
+                SD_TRAIN_AUC,
+
+            "Mean_Validation_AUC":
+                MEAN_VAL_AUC,
+
+            "SD_Validation_AUC":
+                SD_VAL_AUC,
+
+            "OOF_Raw_AUC":
+                OOF_RAW_AUC,
+
+            "OOF_Z_AUC":
+                OOF_Z_AUC,
+
+            "OOF_Accuracy":
+                OOF_METRICS["Accuracy"],
+
+            "OOF_Sensitivity":
+                OOF_METRICS["Sensitivity"],
+
+            "OOF_Specificity":
+                OOF_METRICS["Specificity"],
+
+            "OOF_Balanced_Accuracy":
+                OOF_METRICS["Balanced_Accuracy"],
+
+            "OOF_PPV":
+                OOF_METRICS["PPV"],
+
+            "OOF_NPV":
+                OOF_METRICS["NPV"],
+
+            "OOF_TP":
+                OOF_METRICS["TP"],
+
+            "OOF_FN":
+                OOF_METRICS["FN"],
+
+            "OOF_TN":
+                OOF_METRICS["TN"],
+
+            "OOF_FP":
+                OOF_METRICS["FP"],
+
+            "Test_AUC":
+                TEST_Z_AUC,
+
+            "Test_Accuracy":
+                TEST_METRICS["Accuracy"],
+
+            "Test_Sensitivity":
+                TEST_METRICS["Sensitivity"],
+
+            "Test_Specificity":
+                TEST_METRICS["Specificity"],
+
+            "Test_Balanced_Accuracy":
+                TEST_METRICS["Balanced_Accuracy"],
+
+            "Test_PPV":
+                TEST_METRICS["PPV"],
+
+            "Test_NPV":
+                TEST_METRICS["NPV"],
+
+            "TP":
+                TEST_METRICS["TP"],
+
+            "FN":
+                TEST_METRICS["FN"],
+
+            "TN":
+                TEST_METRICS["TN"],
+
+            "FP":
+                TEST_METRICS["FP"]
+        }
+    ]
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 180
+)
+
+print(
+    "SMALL CHANNEL + KERNEL SIZE + Z-SCORE | FINAL SUMMARY"
+)
+
+print(
+    "=" * 180
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+OUTPUT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_SmallChannel_Kernel_NewSplit_Zscore"
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+fold_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_fold_summary.csv",
+
+    index=False
+)
+
+oof_df_small_kernel.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_OOF_scores.csv",
+
+    index=False
+)
+
+history_df.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_training_history.csv",
+
+    index=False
+)
+
+test_predictions = pd.DataFrame(
+    {
+        "psam_IID":
+            final_test_ids,
+
+        "true_label":
+            final_test_labels,
+
+        "raw_probability":
+            final_test_probs,
+
+        "z_score":
+            test_z_scores,
+
+        "predicted_label":
+            (
+                test_z_scores
+                >=
+                FIXED_Z_THRESHOLD
+            ).astype(int)
+    }
+)
+
+test_predictions.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_Test30_predictions.csv",
+
+    index=False
+)
+
+final_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_Final_Summary.csv",
+
+    index=False
+)
+
+torch.save(
+    final_model.state_dict(),
+    OUTPUT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_Final_Model.pt"
+)
+
+print(
+    "\nResults saved to:"
+)
+
+print(
+    OUTPUT_DIR
+)
+
+
+##only small channal--------------
+#only small channal 且threshold相同的情況下
+import copy
+import gc
+import random
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import torch
+import torch.nn as nn
+
+from sklearn.metrics import roc_auc_score
+
+
+DEVICE = torch.device(
+    "mps"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    else "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+print("Device =", DEVICE)
+
+
+FIXED_Z_THRESHOLD = -0.26371164315112816
+
+BATCH_SIZE = 2
+DROPOUT_RATE = 0.5
+LEARNING_RATE = 5e-5
+WEIGHT_DECAY = 1e-3
+MAX_EPOCHS = 30
+EARLY_STOPPING_PATIENCE = 5
+LR_PATIENCE = 2
+LR_FACTOR = 0.5
+MIN_LEARNING_RATE = 1e-6
+
+MODEL_SEED_BASE = 20260924
+FINAL_MODEL_SEED = 20261006
+
+
+required_objects = [
+    "v6_train120",
+    "v6_test30",
+    "build_final_dataloaders",
+    "build_training_objects",
+    "train_one_epoch",
+    "evaluate_one_epoch"
+]
+
+missing_objects = [
+    x
+    for x in required_objects
+    if x not in globals()
+]
+
+assert len(missing_objects) == 0, (
+    f"缺少 notebook 物件：{missing_objects}"
+)
+
+
+def set_seed(seed):
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+class V6SmallBasicBlock(nn.Module):
+
+    expansion = 1
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        stride=1,
+        num_groups=32
+    ):
+
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.conv2 = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False
+        )
+
+        self.bn2 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        if (
+            stride != 1
+            or
+            in_channels != out_channels
+        ):
+
+            self.downsample = nn.Sequential(
+
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False
+                ),
+
+                nn.GroupNorm(
+                    num_groups,
+                    out_channels
+                )
+            )
+
+        else:
+
+            self.downsample = nn.Identity()
+
+
+    def forward(self, x):
+
+        identity = self.downsample(
+            x
+        )
+
+        out = self.conv1(
+            x
+        )
+
+        out = self.bn1(
+            out
+        )
+
+        out = self.relu(
+            out
+        )
+
+        out = self.conv2(
+            out
+        )
+
+        out = self.bn2(
+            out
+        )
+
+        out = out + identity
+
+        out = self.relu(
+            out
+        )
+
+        return out
+
+
+class V6SmallChannelResNet18(nn.Module):
+
+    def __init__(
+        self,
+        dropout_rate=0.5
+    ):
+
+        super().__init__()
+
+        self.in_channels = 32
+
+        self.conv1 = nn.Conv2d(
+            3,
+            32,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            32,
+            32
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.maxpool = nn.Identity()
+
+        self.layer1 = self._make_layer(
+            out_channels=32,
+            blocks=2,
+            stride=1
+        )
+
+        self.layer2 = self._make_layer(
+            out_channels=64,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer3 = self._make_layer(
+            out_channels=128,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer4 = self._make_layer(
+            out_channels=256,
+            blocks=2,
+            stride=2
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d(
+            (1, 1)
+        )
+
+        self.fc = nn.Sequential(
+
+            nn.Dropout(
+                dropout_rate
+            ),
+
+            nn.Linear(
+                256,
+                1
+            )
+        )
+
+
+    def _make_layer(
+        self,
+        out_channels,
+        blocks,
+        stride
+    ):
+
+        layers = [
+
+            V6SmallBasicBlock(
+                self.in_channels,
+                out_channels,
+                stride=stride
+            )
+        ]
+
+        self.in_channels = out_channels
+
+        for _ in range(
+            1,
+            blocks
+        ):
+
+            layers.append(
+
+                V6SmallBasicBlock(
+                    self.in_channels,
+                    out_channels,
+                    stride=1
+                )
+            )
+
+        return nn.Sequential(
+            *layers
+        )
+
+
+    def forward(self, x):
+
+        x = self.conv1(
+            x
+        )
+
+        x = self.bn1(
+            x
+        )
+
+        x = self.relu(
+            x
+        )
+
+        x = self.maxpool(
+            x
+        )
+
+        x = self.layer1(
+            x
+        )
+
+        x = self.layer2(
+            x
+        )
+
+        x = self.layer3(
+            x
+        )
+
+        x = self.layer4(
+            x
+        )
+
+        x = self.avgpool(
+            x
+        )
+
+        x = torch.flatten(
+            x,
+            1
+        )
+
+        x = self.fc(
+            x
+        )
+
+        return x
+
+
+def build_v6_small_channel_model(
+    seed,
+    device,
+    dropout_rate=0.5
+):
+
+    set_seed(
+        seed
+    )
+
+    model = V6SmallChannelResNet18(
+        dropout_rate=
+            dropout_rate
+    )
+
+    model = model.to(
+        device
+    )
+
+    return model
+
+
+def calculate_metrics(
+    y_true,
+    scores,
+    threshold
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+    y_pred = (
+        scores
+        >=
+        threshold
+    ).astype(int)
+
+    tp = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    fn = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    tn = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    fp = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    sensitivity = (
+        tp / (tp + fn)
+        if (tp + fn) > 0
+        else np.nan
+    )
+
+    specificity = (
+        tn / (tn + fp)
+        if (tn + fp) > 0
+        else np.nan
+    )
+
+    accuracy = (
+        (tp + tn)
+        /
+        len(y_true)
+    )
+
+    balanced_accuracy = (
+        sensitivity
+        +
+        specificity
+    ) / 2
+
+    ppv = (
+        tp / (tp + fp)
+        if (tp + fp) > 0
+        else np.nan
+    )
+
+    npv = (
+        tn / (tn + fn)
+        if (tn + fn) > 0
+        else np.nan
+    )
+
+    auc = roc_auc_score(
+        y_true,
+        scores
+    )
+
+    return {
+        "AUC":
+            auc,
+
+        "Accuracy":
+            accuracy,
+
+        "Sensitivity":
+            sensitivity,
+
+        "Specificity":
+            specificity,
+
+        "Balanced_Accuracy":
+            balanced_accuracy,
+
+        "PPV":
+            ppv,
+
+        "NPV":
+            npv,
+
+        "TP":
+            tp,
+
+        "FN":
+            fn,
+
+        "TN":
+            tn,
+
+        "FP":
+            fp
+    }
+
+
+qc_model = build_v6_small_channel_model(
+    seed=FINAL_MODEL_SEED,
+    device=DEVICE,
+    dropout_rate=DROPOUT_RATE
+)
+
+print("\nArchitecture QC")
+print("Stem =", qc_model.conv1)
+print("Stem norm =", qc_model.bn1)
+print("MaxPool =", qc_model.maxpool)
+print("Layer1 first block =", qc_model.layer1[0])
+print("Layer2 first block =", qc_model.layer2[0])
+print("GAP =", qc_model.avgpool)
+print("Classifier =", qc_model.fc)
+
+print(
+    "Parameters =",
+    sum(
+        p.numel()
+        for p in qc_model.parameters()
+    )
+)
+
+del qc_model
+gc.collect()
+
+
+fold_records = []
+oof_records = []
+history_records = []
+
+
+for fold_number in range(
+    1,
+    6
+):
+
+    seed = (
+        MODEL_SEED_BASE
+        +
+        fold_number
+    )
+
+    set_seed(
+        seed
+    )
+
+    print(
+        "\n"
+        +
+        "=" * 110
+    )
+
+    print(
+        f"ONLY SMALL CHANNEL + Z-SCORE | FOLD {fold_number}/5"
+    )
+
+    print(
+        "=" * 110
+    )
+
+    fold_train_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            !=
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    fold_val_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            ==
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    assert len(fold_train_df) == 96
+    assert len(fold_val_df) == 24
+
+    (
+        train_dataset,
+        train_eval_dataset,
+        val_dataset,
+        train_loader,
+        train_eval_loader,
+        val_loader
+
+    ) = build_final_dataloaders(
+
+        train_df=
+            fold_train_df,
+
+        val_df=
+            fold_train_df,
+
+        test_df=
+            fold_val_df,
+
+        run_seed=
+            seed,
+
+        batch_size=
+            BATCH_SIZE
+    )
+
+    model = build_v6_small_channel_model(
+
+        seed=
+            seed,
+
+        device=
+            DEVICE,
+
+        dropout_rate=
+            DROPOUT_RATE
+    )
+
+    (
+        criterion,
+        optimizer,
+        pos_weight
+
+    ) = build_training_objects(
+
+        model=
+            model,
+
+        train_df=
+            fold_train_df,
+
+        device=
+            DEVICE,
+
+        learning_rate=
+            LEARNING_RATE,
+
+        weight_decay=
+            WEIGHT_DECAY
+    )
+
+    scheduler = (
+        torch.optim.lr_scheduler
+        .ReduceLROnPlateau(
+
+            optimizer,
+
+            mode="max",
+
+            factor=
+                LR_FACTOR,
+
+            patience=
+                LR_PATIENCE,
+
+            min_lr=
+                MIN_LEARNING_RATE
+        )
+    )
+
+    best_val_auc = -np.inf
+    best_val_loss = np.inf
+    best_epoch = 0
+    best_state = None
+    no_improve = 0
+
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1
+    ):
+
+        train_result = train_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                train_loader,
+
+            criterion=
+                criterion,
+
+            optimizer=
+                optimizer,
+
+            device=
+                DEVICE
+        )
+
+        (
+            val_result,
+            _,
+            _,
+            _
+
+        ) = evaluate_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                val_loader,
+
+            criterion=
+                criterion,
+
+            device=
+                DEVICE
+        )
+
+        history_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "epoch":
+                    epoch,
+
+                "train_auc":
+                    train_result["auc"],
+
+                "val_auc":
+                    val_result["auc"],
+
+                "train_loss":
+                    train_result["loss"],
+
+                "val_loss":
+                    val_result["loss"]
+            }
+        )
+
+        better_auc = (
+            val_result["auc"]
+            >
+            best_val_auc
+            +
+            1e-8
+        )
+
+        same_auc_better_loss = (
+            abs(
+                val_result["auc"]
+                -
+                best_val_auc
+            )
+            <=
+            1e-8
+            and
+            val_result["loss"]
+            <
+            best_val_loss
+        )
+
+        if (
+            better_auc
+            or
+            same_auc_better_loss
+        ):
+
+            best_val_auc = float(
+                val_result["auc"]
+            )
+
+            best_val_loss = float(
+                val_result["loss"]
+            )
+
+            best_epoch = epoch
+
+            best_state = copy.deepcopy(
+                model.state_dict()
+            )
+
+            no_improve = 0
+
+        else:
+
+            no_improve += 1
+
+        scheduler.step(
+            val_result["auc"]
+        )
+
+        print(
+            f"Epoch {epoch:02d}"
+            f" | Train AUC {train_result['auc']:.4f}"
+            f" | Val AUC {val_result['auc']:.4f}"
+            f" | Best {best_epoch}"
+        )
+
+        if (
+            no_improve
+            >=
+            EARLY_STOPPING_PATIENCE
+        ):
+
+            print(
+                "Early stopping."
+            )
+
+            break
+
+    model.load_state_dict(
+        best_state
+    )
+
+    (
+        best_train_result,
+        best_train_labels,
+        best_train_probs,
+        best_train_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            train_eval_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    (
+        best_val_result,
+        best_val_labels,
+        best_val_probs,
+        best_val_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            val_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    best_train_probs = np.asarray(
+        best_train_probs,
+        dtype=float
+    )
+
+    best_val_probs = np.asarray(
+        best_val_probs,
+        dtype=float
+    )
+
+    train_mean = float(
+        np.mean(
+            best_train_probs
+        )
+    )
+
+    train_sd = float(
+        np.std(
+            best_train_probs,
+            ddof=0
+        )
+    )
+
+    assert train_sd > 0
+
+    val_z_scores = (
+        best_val_probs
+        -
+        train_mean
+    ) / train_sd
+
+    fold_records.append(
+        {
+            "fold":
+                fold_number,
+
+            "best_epoch":
+                best_epoch,
+
+            "train_auc":
+                best_train_result["auc"],
+
+            "val_auc":
+                best_val_result["auc"],
+
+            "train_prob_mean":
+                train_mean,
+
+            "train_prob_sd":
+                train_sd,
+
+            "val_prob_mean":
+                np.mean(
+                    best_val_probs
+                ),
+
+            "val_prob_sd":
+                np.std(
+                    best_val_probs,
+                    ddof=0
+                )
+        }
+    )
+
+    for (
+        sample_id,
+        true_label,
+        raw_probability,
+        z_score
+
+    ) in zip(
+
+        best_val_ids,
+        best_val_labels,
+        best_val_probs,
+        val_z_scores
+    ):
+
+        oof_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "psam_IID":
+                    sample_id,
+
+                "true_label":
+                    int(
+                        true_label
+                    ),
+
+                "raw_probability":
+                    float(
+                        raw_probability
+                    ),
+
+                "oof_z_score":
+                    float(
+                        z_score
+                    )
+            }
+        )
+
+    print(
+        "\nBest epoch =",
+        best_epoch
+    )
+
+    print(
+        "Train AUC =",
+        round(
+            best_train_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Validation AUC =",
+        round(
+            best_val_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Train probability mean =",
+        train_mean
+    )
+
+    print(
+        "Train probability SD =",
+        train_sd
+    )
+
+    del model
+    del optimizer
+    del criterion
+
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+fold_summary = pd.DataFrame(
+    fold_records
+)
+
+oof_df_small_channel = pd.DataFrame(
+    oof_records
+)
+
+history_df = pd.DataFrame(
+    history_records
+)
+
+assert len(
+    oof_df_small_channel
+) == 120
+
+
+MEAN_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .mean()
+)
+
+SD_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .std(ddof=1)
+)
+
+MEAN_VAL_AUC = (
+    fold_summary["val_auc"]
+    .mean()
+)
+
+SD_VAL_AUC = (
+    fold_summary["val_auc"]
+    .std(ddof=1)
+)
+
+OOF_RAW_AUC = roc_auc_score(
+    oof_df_small_channel["true_label"],
+    oof_df_small_channel["raw_probability"]
+)
+
+OOF_Z_AUC = roc_auc_score(
+    oof_df_small_channel["true_label"],
+    oof_df_small_channel["oof_z_score"]
+)
+
+OOF_METRICS = calculate_metrics(
+
+    y_true=
+        oof_df_small_channel["true_label"],
+
+    scores=
+        oof_df_small_channel["oof_z_score"],
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+FINAL_EPOCHS = int(
+    np.median(
+        fold_summary["best_epoch"]
+    )
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "ONLY SMALL CHANNEL + Z-SCORE | 5-FOLD SUMMARY"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    fold_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+print(
+    "\nMean Train AUC =",
+    round(
+        MEAN_TRAIN_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_TRAIN_AUC,
+        4
+    )
+)
+
+print(
+    "Mean Validation AUC =",
+    round(
+        MEAN_VAL_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_VAL_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Raw AUC =",
+    round(
+        OOF_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Z-score AUC =",
+    round(
+        OOF_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "OOF Accuracy =",
+    round(
+        OOF_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF Sensitivity =",
+    round(
+        OOF_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "OOF Specificity =",
+    round(
+        OOF_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "OOF Balanced Accuracy =",
+    round(
+        OOF_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF PPV =",
+    OOF_METRICS["PPV"]
+)
+
+print(
+    "OOF NPV =",
+    OOF_METRICS["NPV"]
+)
+
+print(
+    "OOF TP =",
+    OOF_METRICS["TP"]
+)
+
+print(
+    "OOF FN =",
+    OOF_METRICS["FN"]
+)
+
+print(
+    "OOF TN =",
+    OOF_METRICS["TN"]
+)
+
+print(
+    "OOF FP =",
+    OOF_METRICS["FP"]
+)
+
+print(
+    "Median best epoch =",
+    FINAL_EPOCHS
+)
+
+
+set_seed(
+    FINAL_MODEL_SEED
+)
+
+(
+    final_train_dataset,
+    final_train_eval_dataset,
+    final_test_dataset,
+    final_train_loader,
+    final_train_eval_loader,
+    final_test_loader
+
+) = build_final_dataloaders(
+
+    train_df=
+        v6_train120,
+
+    val_df=
+        v6_train120,
+
+    test_df=
+        v6_test30,
+
+    run_seed=
+        FINAL_MODEL_SEED,
+
+    batch_size=
+        BATCH_SIZE
+)
+
+final_model = build_v6_small_channel_model(
+
+    seed=
+        FINAL_MODEL_SEED,
+
+    device=
+        DEVICE,
+
+    dropout_rate=
+        DROPOUT_RATE
+)
+
+(
+    final_criterion,
+    final_optimizer,
+    final_pos_weight
+
+) = build_training_objects(
+
+    model=
+        final_model,
+
+    train_df=
+        v6_train120,
+
+    device=
+        DEVICE,
+
+    learning_rate=
+        LEARNING_RATE,
+
+    weight_decay=
+        WEIGHT_DECAY
+)
+
+for epoch in range(
+    1,
+    FINAL_EPOCHS + 1
+):
+
+    final_train_epoch_result = train_one_epoch(
+
+        model=
+            final_model,
+
+        data_loader=
+            final_train_loader,
+
+        criterion=
+            final_criterion,
+
+        optimizer=
+            final_optimizer,
+
+        device=
+            DEVICE
+    )
+
+    print(
+        f"Final epoch {epoch}/{FINAL_EPOCHS}"
+        f" | Train AUC "
+        f"{final_train_epoch_result['auc']:.4f}"
+    )
+
+
+(
+    final_train_result,
+    final_train_labels,
+    final_train_probs,
+    final_train_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_train_eval_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_train_probs = np.asarray(
+    final_train_probs,
+    dtype=float
+)
+
+FINAL_TRAIN_MEAN = float(
+    np.mean(
+        final_train_probs
+    )
+)
+
+FINAL_TRAIN_SD = float(
+    np.std(
+        final_train_probs,
+        ddof=0
+    )
+)
+
+assert FINAL_TRAIN_SD > 0
+
+
+(
+    final_test_result,
+    final_test_labels,
+    final_test_probs,
+    final_test_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_test_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_test_labels = np.asarray(
+    final_test_labels,
+    dtype=int
+)
+
+final_test_probs = np.asarray(
+    final_test_probs,
+    dtype=float
+)
+
+test_z_scores = (
+    final_test_probs
+    -
+    FINAL_TRAIN_MEAN
+) / FINAL_TRAIN_SD
+
+TEST_RAW_AUC = roc_auc_score(
+    final_test_labels,
+    final_test_probs
+)
+
+TEST_Z_AUC = roc_auc_score(
+    final_test_labels,
+    test_z_scores
+)
+
+TEST_METRICS = calculate_metrics(
+
+    y_true=
+        final_test_labels,
+
+    scores=
+        test_z_scores,
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+
+print(
+    "\nFinal Train120 probability mean =",
+    FINAL_TRAIN_MEAN
+)
+
+print(
+    "Final Train120 probability SD =",
+    FINAL_TRAIN_SD
+)
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "FINAL TEST30 | ONLY SMALL CHANNEL + Z-SCORE"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "Test Raw AUC =",
+    round(
+        TEST_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "Test Z-score AUC =",
+    round(
+        TEST_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Accuracy =",
+    round(
+        TEST_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "Sensitivity =",
+    round(
+        TEST_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "Specificity =",
+    round(
+        TEST_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "Balanced Accuracy =",
+    round(
+        TEST_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "PPV =",
+    TEST_METRICS["PPV"]
+)
+
+print(
+    "NPV =",
+    TEST_METRICS["NPV"]
+)
+
+print(
+    "TP =",
+    TEST_METRICS["TP"]
+)
+
+print(
+    "FN =",
+    TEST_METRICS["FN"]
+)
+
+print(
+    "TN =",
+    TEST_METRICS["TN"]
+)
+
+print(
+    "FP =",
+    TEST_METRICS["FP"]
+)
+
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model":
+                "Only Small Channel",
+
+            "Channels":
+                "32/64/128/256",
+
+            "Stem":
+                "7x7 stride2",
+
+            "Z_score":
+                "Yes",
+
+            "Z_Threshold":
+                FIXED_Z_THRESHOLD,
+
+            "Mean_Train_AUC":
+                MEAN_TRAIN_AUC,
+
+            "SD_Train_AUC":
+                SD_TRAIN_AUC,
+
+            "Mean_Validation_AUC":
+                MEAN_VAL_AUC,
+
+            "SD_Validation_AUC":
+                SD_VAL_AUC,
+
+            "OOF_Raw_AUC":
+                OOF_RAW_AUC,
+
+            "OOF_Z_AUC":
+                OOF_Z_AUC,
+
+            "OOF_Accuracy":
+                OOF_METRICS["Accuracy"],
+
+            "OOF_Sensitivity":
+                OOF_METRICS["Sensitivity"],
+
+            "OOF_Specificity":
+                OOF_METRICS["Specificity"],
+
+            "OOF_Balanced_Accuracy":
+                OOF_METRICS["Balanced_Accuracy"],
+
+            "OOF_PPV":
+                OOF_METRICS["PPV"],
+
+            "OOF_NPV":
+                OOF_METRICS["NPV"],
+
+            "OOF_TP":
+                OOF_METRICS["TP"],
+
+            "OOF_FN":
+                OOF_METRICS["FN"],
+
+            "OOF_TN":
+                OOF_METRICS["TN"],
+
+            "OOF_FP":
+                OOF_METRICS["FP"],
+
+            "Test_AUC":
+                TEST_Z_AUC,
+
+            "Test_Accuracy":
+                TEST_METRICS["Accuracy"],
+
+            "Test_Sensitivity":
+                TEST_METRICS["Sensitivity"],
+
+            "Test_Specificity":
+                TEST_METRICS["Specificity"],
+
+            "Test_Balanced_Accuracy":
+                TEST_METRICS["Balanced_Accuracy"],
+
+            "Test_PPV":
+                TEST_METRICS["PPV"],
+
+            "Test_NPV":
+                TEST_METRICS["NPV"],
+
+            "TP":
+                TEST_METRICS["TP"],
+
+            "FN":
+                TEST_METRICS["FN"],
+
+            "TN":
+                TEST_METRICS["TN"],
+
+            "FP":
+                TEST_METRICS["FP"]
+        }
+    ]
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 180
+)
+
+print(
+    "ONLY SMALL CHANNEL + Z-SCORE | FINAL SUMMARY"
+)
+
+print(
+    "=" * 180
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+OUTPUT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_SmallChannel_NewSplit_Zscore"
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+fold_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_fold_summary.csv",
+
+    index=False
+)
+
+oof_df_small_channel.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_OOF_scores.csv",
+
+    index=False
+)
+
+history_df.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_training_history.csv",
+
+    index=False
+)
+
+test_predictions = pd.DataFrame(
+    {
+        "psam_IID":
+            final_test_ids,
+
+        "true_label":
+            final_test_labels,
+
+        "raw_probability":
+            final_test_probs,
+
+        "z_score":
+            test_z_scores,
+
+        "predicted_label":
+            (
+                test_z_scores
+                >=
+                FIXED_Z_THRESHOLD
+            ).astype(int)
+    }
+)
+
+test_predictions.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_Test30_predictions.csv",
+
+    index=False
+)
+
+final_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_Final_Summary.csv",
+
+    index=False
+)
+
+torch.save(
+    final_model.state_dict(),
+    OUTPUT_DIR
+    /
+    "SmallChannel_Zscore_Final_Model.pt"
+)
+
+print(
+    "\nResults saved to:"
+)
+
+print(
+    OUTPUT_DIR
+)
+
+
+#only kernal size-----------------
+#kernal size 且threshold相同的情況下
+
+import copy
+import gc
+import random
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+import torch
+import torch.nn as nn
+
+from sklearn.metrics import roc_auc_score
+
+
+DEVICE = torch.device(
+    "mps"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    else "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+)
+
+print("Device =", DEVICE)
+
+
+FIXED_Z_THRESHOLD = -0.26371164315112816
+
+BATCH_SIZE = 2
+DROPOUT_RATE = 0.5
+LEARNING_RATE = 5e-5
+WEIGHT_DECAY = 1e-3
+MAX_EPOCHS = 30
+EARLY_STOPPING_PATIENCE = 5
+LR_PATIENCE = 2
+LR_FACTOR = 0.5
+MIN_LEARNING_RATE = 1e-6
+
+MODEL_SEED_BASE = 20260924
+FINAL_MODEL_SEED = 20261006
+
+
+required_objects = [
+    "v6_train120",
+    "v6_test30",
+    "build_final_dataloaders",
+    "build_training_objects",
+    "train_one_epoch",
+    "evaluate_one_epoch"
+]
+
+missing_objects = [
+    x
+    for x in required_objects
+    if x not in globals()
+]
+
+assert len(missing_objects) == 0, (
+    f"缺少 notebook 物件：{missing_objects}"
+)
+
+
+def set_seed(seed):
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+class V6KernelBasicBlock(nn.Module):
+
+    expansion = 1
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        stride=1,
+        num_groups=32
+    ):
+
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=1,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.conv2 = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False
+        )
+
+        self.bn2 = nn.GroupNorm(
+            num_groups,
+            out_channels
+        )
+
+        if (
+            stride == 2
+            and
+            in_channels == out_channels
+        ):
+
+            self.downsample = nn.AvgPool2d(
+                kernel_size=2,
+                stride=2
+            )
+
+        elif (
+            stride != 1
+            or
+            in_channels != out_channels
+        ):
+
+            self.downsample = nn.Sequential(
+
+                nn.Conv2d(
+                    in_channels,
+                    out_channels,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False
+                ),
+
+                nn.GroupNorm(
+                    num_groups,
+                    out_channels
+                )
+            )
+
+        else:
+
+            self.downsample = nn.Identity()
+
+
+    def forward(self, x):
+
+        identity = self.downsample(
+            x
+        )
+
+        out = self.conv1(
+            x
+        )
+
+        out = self.bn1(
+            out
+        )
+
+        out = self.relu(
+            out
+        )
+
+        out = self.conv2(
+            out
+        )
+
+        out = self.bn2(
+            out
+        )
+
+        out = out + identity
+
+        out = self.relu(
+            out
+        )
+
+        return out
+
+
+class V6KernelResNet18(nn.Module):
+
+    def __init__(
+        self,
+        dropout_rate=0.5
+    ):
+
+        super().__init__()
+
+        self.in_channels = 64
+
+        self.conv1 = nn.Conv2d(
+            3,
+            64,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False
+        )
+
+        self.bn1 = nn.GroupNorm(
+            32,
+            64
+        )
+
+        self.relu = nn.ReLU(
+            inplace=True
+        )
+
+        self.maxpool = nn.Identity()
+
+        self.layer1 = self._make_layer(
+            out_channels=64,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer2 = self._make_layer(
+            out_channels=128,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer3 = self._make_layer(
+            out_channels=256,
+            blocks=2,
+            stride=2
+        )
+
+        self.layer4 = self._make_layer(
+            out_channels=512,
+            blocks=2,
+            stride=2
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d(
+            (1, 1)
+        )
+
+        self.fc = nn.Sequential(
+
+            nn.Dropout(
+                dropout_rate
+            ),
+
+            nn.Linear(
+                512,
+                1
+            )
+        )
+
+
+    def _make_layer(
+        self,
+        out_channels,
+        blocks,
+        stride
+    ):
+
+        layers = [
+
+            V6KernelBasicBlock(
+                self.in_channels,
+                out_channels,
+                stride=stride
+            )
+        ]
+
+        self.in_channels = out_channels
+
+        for _ in range(
+            1,
+            blocks
+        ):
+
+            layers.append(
+
+                V6KernelBasicBlock(
+                    self.in_channels,
+                    out_channels,
+                    stride=1
+                )
+            )
+
+        return nn.Sequential(
+            *layers
+        )
+
+
+    def forward(self, x):
+
+        x = self.conv1(
+            x
+        )
+
+        x = self.bn1(
+            x
+        )
+
+        x = self.relu(
+            x
+        )
+
+        x = self.maxpool(
+            x
+        )
+
+        x = self.layer1(
+            x
+        )
+
+        x = self.layer2(
+            x
+        )
+
+        x = self.layer3(
+            x
+        )
+
+        x = self.layer4(
+            x
+        )
+
+        x = self.avgpool(
+            x
+        )
+
+        x = torch.flatten(
+            x,
+            1
+        )
+
+        x = self.fc(
+            x
+        )
+
+        return x
+
+
+def build_v6_kernel_model(
+    seed,
+    device,
+    dropout_rate=0.5
+):
+
+    set_seed(
+        seed
+    )
+
+    model = V6KernelResNet18(
+        dropout_rate=
+            dropout_rate
+    )
+
+    model = model.to(
+        device
+    )
+
+    return model
+
+
+def calculate_metrics(
+    y_true,
+    scores,
+    threshold
+):
+
+    y_true = np.asarray(
+        y_true,
+        dtype=int
+    )
+
+    scores = np.asarray(
+        scores,
+        dtype=float
+    )
+
+    y_pred = (
+        scores
+        >=
+        threshold
+    ).astype(int)
+
+    tp = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    fn = int(
+        np.sum(
+            (y_true == 1)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    tn = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 0)
+        )
+    )
+
+    fp = int(
+        np.sum(
+            (y_true == 0)
+            &
+            (y_pred == 1)
+        )
+    )
+
+    sensitivity = (
+        tp / (tp + fn)
+        if (tp + fn) > 0
+        else np.nan
+    )
+
+    specificity = (
+        tn / (tn + fp)
+        if (tn + fp) > 0
+        else np.nan
+    )
+
+    accuracy = (
+        (tp + tn)
+        /
+        len(y_true)
+    )
+
+    balanced_accuracy = (
+        sensitivity
+        +
+        specificity
+    ) / 2
+
+    ppv = (
+        tp / (tp + fp)
+        if (tp + fp) > 0
+        else np.nan
+    )
+
+    npv = (
+        tn / (tn + fn)
+        if (tn + fn) > 0
+        else np.nan
+    )
+
+    auc = roc_auc_score(
+        y_true,
+        scores
+    )
+
+    return {
+        "AUC":
+            auc,
+
+        "Accuracy":
+            accuracy,
+
+        "Sensitivity":
+            sensitivity,
+
+        "Specificity":
+            specificity,
+
+        "Balanced_Accuracy":
+            balanced_accuracy,
+
+        "PPV":
+            ppv,
+
+        "NPV":
+            npv,
+
+        "TP":
+            tp,
+
+        "FN":
+            fn,
+
+        "TN":
+            tn,
+
+        "FP":
+            fp
+    }
+
+
+qc_model = build_v6_kernel_model(
+    seed=FINAL_MODEL_SEED,
+    device=DEVICE,
+    dropout_rate=DROPOUT_RATE
+)
+
+print("\nArchitecture QC")
+print("Stem =", qc_model.conv1)
+print("Stem norm =", qc_model.bn1)
+print("MaxPool =", qc_model.maxpool)
+print("Layer1 first block =", qc_model.layer1[0])
+print("Layer2 first block =", qc_model.layer2[0])
+print("GAP =", qc_model.avgpool)
+print("Classifier =", qc_model.fc)
+
+print(
+    "Parameters =",
+    sum(
+        p.numel()
+        for p in qc_model.parameters()
+    )
+)
+
+del qc_model
+gc.collect()
+
+
+fold_records = []
+oof_records = []
+history_records = []
+
+
+for fold_number in range(
+    1,
+    6
+):
+
+    seed = (
+        MODEL_SEED_BASE
+        +
+        fold_number
+    )
+
+    set_seed(
+        seed
+    )
+
+    print(
+        "\n"
+        +
+        "=" * 110
+    )
+
+    print(
+        f"ONLY KERNEL SIZE + Z-SCORE | FOLD {fold_number}/5"
+    )
+
+    print(
+        "=" * 110
+    )
+
+    fold_train_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            !=
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    fold_val_df = (
+        v6_train120[
+            v6_train120["cv_fold"]
+            ==
+            fold_number
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    assert len(fold_train_df) == 96
+    assert len(fold_val_df) == 24
+
+    (
+        train_dataset,
+        train_eval_dataset,
+        val_dataset,
+        train_loader,
+        train_eval_loader,
+        val_loader
+
+    ) = build_final_dataloaders(
+
+        train_df=
+            fold_train_df,
+
+        val_df=
+            fold_train_df,
+
+        test_df=
+            fold_val_df,
+
+        run_seed=
+            seed,
+
+        batch_size=
+            BATCH_SIZE
+    )
+
+    model = build_v6_kernel_model(
+
+        seed=
+            seed,
+
+        device=
+            DEVICE,
+
+        dropout_rate=
+            DROPOUT_RATE
+    )
+
+    (
+        criterion,
+        optimizer,
+        pos_weight
+
+    ) = build_training_objects(
+
+        model=
+            model,
+
+        train_df=
+            fold_train_df,
+
+        device=
+            DEVICE,
+
+        learning_rate=
+            LEARNING_RATE,
+
+        weight_decay=
+            WEIGHT_DECAY
+    )
+
+    scheduler = (
+        torch.optim.lr_scheduler
+        .ReduceLROnPlateau(
+
+            optimizer,
+
+            mode="max",
+
+            factor=
+                LR_FACTOR,
+
+            patience=
+                LR_PATIENCE,
+
+            min_lr=
+                MIN_LEARNING_RATE
+        )
+    )
+
+    best_val_auc = -np.inf
+    best_val_loss = np.inf
+    best_epoch = 0
+    best_state = None
+    no_improve = 0
+
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1
+    ):
+
+        train_result = train_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                train_loader,
+
+            criterion=
+                criterion,
+
+            optimizer=
+                optimizer,
+
+            device=
+                DEVICE
+        )
+
+        (
+            val_result,
+            _,
+            _,
+            _
+
+        ) = evaluate_one_epoch(
+
+            model=
+                model,
+
+            data_loader=
+                val_loader,
+
+            criterion=
+                criterion,
+
+            device=
+                DEVICE
+        )
+
+        history_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "epoch":
+                    epoch,
+
+                "train_auc":
+                    train_result["auc"],
+
+                "val_auc":
+                    val_result["auc"],
+
+                "train_loss":
+                    train_result["loss"],
+
+                "val_loss":
+                    val_result["loss"]
+            }
+        )
+
+        better_auc = (
+            val_result["auc"]
+            >
+            best_val_auc
+            +
+            1e-8
+        )
+
+        same_auc_better_loss = (
+            abs(
+                val_result["auc"]
+                -
+                best_val_auc
+            )
+            <=
+            1e-8
+            and
+            val_result["loss"]
+            <
+            best_val_loss
+        )
+
+        if (
+            better_auc
+            or
+            same_auc_better_loss
+        ):
+
+            best_val_auc = float(
+                val_result["auc"]
+            )
+
+            best_val_loss = float(
+                val_result["loss"]
+            )
+
+            best_epoch = epoch
+
+            best_state = copy.deepcopy(
+                model.state_dict()
+            )
+
+            no_improve = 0
+
+        else:
+
+            no_improve += 1
+
+        scheduler.step(
+            val_result["auc"]
+        )
+
+        print(
+            f"Epoch {epoch:02d}"
+            f" | Train AUC {train_result['auc']:.4f}"
+            f" | Val AUC {val_result['auc']:.4f}"
+            f" | Best {best_epoch}"
+        )
+
+        if (
+            no_improve
+            >=
+            EARLY_STOPPING_PATIENCE
+        ):
+
+            print(
+                "Early stopping."
+            )
+
+            break
+
+    model.load_state_dict(
+        best_state
+    )
+
+    (
+        best_train_result,
+        best_train_labels,
+        best_train_probs,
+        best_train_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            train_eval_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    (
+        best_val_result,
+        best_val_labels,
+        best_val_probs,
+        best_val_ids
+
+    ) = evaluate_one_epoch(
+
+        model=
+            model,
+
+        data_loader=
+            val_loader,
+
+        criterion=
+            criterion,
+
+        device=
+            DEVICE
+    )
+
+    best_train_probs = np.asarray(
+        best_train_probs,
+        dtype=float
+    )
+
+    best_val_probs = np.asarray(
+        best_val_probs,
+        dtype=float
+    )
+
+    train_mean = float(
+        np.mean(
+            best_train_probs
+        )
+    )
+
+    train_sd = float(
+        np.std(
+            best_train_probs,
+            ddof=0
+        )
+    )
+
+    assert train_sd > 0
+
+    val_z_scores = (
+        best_val_probs
+        -
+        train_mean
+    ) / train_sd
+
+    fold_records.append(
+        {
+            "fold":
+                fold_number,
+
+            "best_epoch":
+                best_epoch,
+
+            "train_auc":
+                best_train_result["auc"],
+
+            "val_auc":
+                best_val_result["auc"],
+
+            "train_prob_mean":
+                train_mean,
+
+            "train_prob_sd":
+                train_sd,
+
+            "val_prob_mean":
+                np.mean(
+                    best_val_probs
+                ),
+
+            "val_prob_sd":
+                np.std(
+                    best_val_probs,
+                    ddof=0
+                )
+        }
+    )
+
+    for (
+        sample_id,
+        true_label,
+        raw_probability,
+        z_score
+
+    ) in zip(
+
+        best_val_ids,
+        best_val_labels,
+        best_val_probs,
+        val_z_scores
+    ):
+
+        oof_records.append(
+            {
+                "fold":
+                    fold_number,
+
+                "psam_IID":
+                    sample_id,
+
+                "true_label":
+                    int(
+                        true_label
+                    ),
+
+                "raw_probability":
+                    float(
+                        raw_probability
+                    ),
+
+                "oof_z_score":
+                    float(
+                        z_score
+                    )
+            }
+        )
+
+    print(
+        "\nBest epoch =",
+        best_epoch
+    )
+
+    print(
+        "Train AUC =",
+        round(
+            best_train_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Validation AUC =",
+        round(
+            best_val_result["auc"],
+            4
+        )
+    )
+
+    print(
+        "Train probability mean =",
+        train_mean
+    )
+
+    print(
+        "Train probability SD =",
+        train_sd
+    )
+
+    del model
+    del optimizer
+    del criterion
+
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+fold_summary = pd.DataFrame(
+    fold_records
+)
+
+oof_df_kernel = pd.DataFrame(
+    oof_records
+)
+
+history_df = pd.DataFrame(
+    history_records
+)
+
+assert len(
+    oof_df_kernel
+) == 120
+
+
+MEAN_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .mean()
+)
+
+SD_TRAIN_AUC = (
+    fold_summary["train_auc"]
+    .std(ddof=1)
+)
+
+MEAN_VAL_AUC = (
+    fold_summary["val_auc"]
+    .mean()
+)
+
+SD_VAL_AUC = (
+    fold_summary["val_auc"]
+    .std(ddof=1)
+)
+
+OOF_RAW_AUC = roc_auc_score(
+    oof_df_kernel["true_label"],
+    oof_df_kernel["raw_probability"]
+)
+
+OOF_Z_AUC = roc_auc_score(
+    oof_df_kernel["true_label"],
+    oof_df_kernel["oof_z_score"]
+)
+
+OOF_METRICS = calculate_metrics(
+
+    y_true=
+        oof_df_kernel["true_label"],
+
+    scores=
+        oof_df_kernel["oof_z_score"],
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+FINAL_EPOCHS = int(
+    np.median(
+        fold_summary["best_epoch"]
+    )
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "ONLY KERNEL SIZE + Z-SCORE | 5-FOLD SUMMARY"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    fold_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+print(
+    "\nMean Train AUC =",
+    round(
+        MEAN_TRAIN_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_TRAIN_AUC,
+        4
+    )
+)
+
+print(
+    "Mean Validation AUC =",
+    round(
+        MEAN_VAL_AUC,
+        4
+    ),
+    "+/-",
+    round(
+        SD_VAL_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Raw AUC =",
+    round(
+        OOF_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "OOF Z-score AUC =",
+    round(
+        OOF_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "OOF Accuracy =",
+    round(
+        OOF_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF Sensitivity =",
+    round(
+        OOF_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "OOF Specificity =",
+    round(
+        OOF_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "OOF Balanced Accuracy =",
+    round(
+        OOF_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "OOF PPV =",
+    OOF_METRICS["PPV"]
+)
+
+print(
+    "OOF NPV =",
+    OOF_METRICS["NPV"]
+)
+
+print(
+    "OOF TP =",
+    OOF_METRICS["TP"]
+)
+
+print(
+    "OOF FN =",
+    OOF_METRICS["FN"]
+)
+
+print(
+    "OOF TN =",
+    OOF_METRICS["TN"]
+)
+
+print(
+    "OOF FP =",
+    OOF_METRICS["FP"]
+)
+
+print(
+    "Median best epoch =",
+    FINAL_EPOCHS
+)
+
+
+set_seed(
+    FINAL_MODEL_SEED
+)
+
+(
+    final_train_dataset,
+    final_train_eval_dataset,
+    final_test_dataset,
+    final_train_loader,
+    final_train_eval_loader,
+    final_test_loader
+
+) = build_final_dataloaders(
+
+    train_df=
+        v6_train120,
+
+    val_df=
+        v6_train120,
+
+    test_df=
+        v6_test30,
+
+    run_seed=
+        FINAL_MODEL_SEED,
+
+    batch_size=
+        BATCH_SIZE
+)
+
+final_model = build_v6_kernel_model(
+
+    seed=
+        FINAL_MODEL_SEED,
+
+    device=
+        DEVICE,
+
+    dropout_rate=
+        DROPOUT_RATE
+)
+
+(
+    final_criterion,
+    final_optimizer,
+    final_pos_weight
+
+) = build_training_objects(
+
+    model=
+        final_model,
+
+    train_df=
+        v6_train120,
+
+    device=
+        DEVICE,
+
+    learning_rate=
+        LEARNING_RATE,
+
+    weight_decay=
+        WEIGHT_DECAY
+)
+
+for epoch in range(
+    1,
+    FINAL_EPOCHS + 1
+):
+
+    final_train_epoch_result = train_one_epoch(
+
+        model=
+            final_model,
+
+        data_loader=
+            final_train_loader,
+
+        criterion=
+            final_criterion,
+
+        optimizer=
+            final_optimizer,
+
+        device=
+            DEVICE
+    )
+
+    print(
+        f"Final epoch {epoch}/{FINAL_EPOCHS}"
+        f" | Train AUC "
+        f"{final_train_epoch_result['auc']:.4f}"
+    )
+
+
+(
+    final_train_result,
+    final_train_labels,
+    final_train_probs,
+    final_train_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_train_eval_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_train_probs = np.asarray(
+    final_train_probs,
+    dtype=float
+)
+
+FINAL_TRAIN_MEAN = float(
+    np.mean(
+        final_train_probs
+    )
+)
+
+FINAL_TRAIN_SD = float(
+    np.std(
+        final_train_probs,
+        ddof=0
+    )
+)
+
+assert FINAL_TRAIN_SD > 0
+
+
+(
+    final_test_result,
+    final_test_labels,
+    final_test_probs,
+    final_test_ids
+
+) = evaluate_one_epoch(
+
+    model=
+        final_model,
+
+    data_loader=
+        final_test_loader,
+
+    criterion=
+        final_criterion,
+
+    device=
+        DEVICE
+)
+
+final_test_labels = np.asarray(
+    final_test_labels,
+    dtype=int
+)
+
+final_test_probs = np.asarray(
+    final_test_probs,
+    dtype=float
+)
+
+test_z_scores = (
+    final_test_probs
+    -
+    FINAL_TRAIN_MEAN
+) / FINAL_TRAIN_SD
+
+TEST_RAW_AUC = roc_auc_score(
+    final_test_labels,
+    final_test_probs
+)
+
+TEST_Z_AUC = roc_auc_score(
+    final_test_labels,
+    test_z_scores
+)
+
+TEST_METRICS = calculate_metrics(
+
+    y_true=
+        final_test_labels,
+
+    scores=
+        test_z_scores,
+
+    threshold=
+        FIXED_Z_THRESHOLD
+)
+
+
+print(
+    "\nFinal Train120 probability mean =",
+    FINAL_TRAIN_MEAN
+)
+
+print(
+    "Final Train120 probability SD =",
+    FINAL_TRAIN_SD
+)
+
+print(
+    "\n"
+    +
+    "=" * 120
+)
+
+print(
+    "FINAL TEST30 | ONLY KERNEL SIZE + Z-SCORE"
+)
+
+print(
+    "=" * 120
+)
+
+print(
+    "Fixed Z threshold =",
+    FIXED_Z_THRESHOLD
+)
+
+print(
+    "Test Raw AUC =",
+    round(
+        TEST_RAW_AUC,
+        4
+    )
+)
+
+print(
+    "Test Z-score AUC =",
+    round(
+        TEST_Z_AUC,
+        4
+    )
+)
+
+print(
+    "Accuracy =",
+    round(
+        TEST_METRICS["Accuracy"],
+        4
+    )
+)
+
+print(
+    "Sensitivity =",
+    round(
+        TEST_METRICS["Sensitivity"],
+        4
+    )
+)
+
+print(
+    "Specificity =",
+    round(
+        TEST_METRICS["Specificity"],
+        4
+    )
+)
+
+print(
+    "Balanced Accuracy =",
+    round(
+        TEST_METRICS["Balanced_Accuracy"],
+        4
+    )
+)
+
+print(
+    "PPV =",
+    TEST_METRICS["PPV"]
+)
+
+print(
+    "NPV =",
+    TEST_METRICS["NPV"]
+)
+
+print(
+    "TP =",
+    TEST_METRICS["TP"]
+)
+
+print(
+    "FN =",
+    TEST_METRICS["FN"]
+)
+
+print(
+    "TN =",
+    TEST_METRICS["TN"]
+)
+
+print(
+    "FP =",
+    TEST_METRICS["FP"]
+)
+
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model":
+                "Only Kernel Size",
+
+            "Channels":
+                "64/128/256/512",
+
+            "Stem":
+                "3x3 stride1",
+
+            "Z_score":
+                "Yes",
+
+            "Z_Threshold":
+                FIXED_Z_THRESHOLD,
+
+            "Mean_Train_AUC":
+                MEAN_TRAIN_AUC,
+
+            "SD_Train_AUC":
+                SD_TRAIN_AUC,
+
+            "Mean_Validation_AUC":
+                MEAN_VAL_AUC,
+
+            "SD_Validation_AUC":
+                SD_VAL_AUC,
+
+            "OOF_Raw_AUC":
+                OOF_RAW_AUC,
+
+            "OOF_Z_AUC":
+                OOF_Z_AUC,
+
+            "OOF_Accuracy":
+                OOF_METRICS["Accuracy"],
+
+            "OOF_Sensitivity":
+                OOF_METRICS["Sensitivity"],
+
+            "OOF_Specificity":
+                OOF_METRICS["Specificity"],
+
+            "OOF_Balanced_Accuracy":
+                OOF_METRICS["Balanced_Accuracy"],
+
+            "OOF_PPV":
+                OOF_METRICS["PPV"],
+
+            "OOF_NPV":
+                OOF_METRICS["NPV"],
+
+            "OOF_TP":
+                OOF_METRICS["TP"],
+
+            "OOF_FN":
+                OOF_METRICS["FN"],
+
+            "OOF_TN":
+                OOF_METRICS["TN"],
+
+            "OOF_FP":
+                OOF_METRICS["FP"],
+
+            "Test_AUC":
+                TEST_Z_AUC,
+
+            "Test_Accuracy":
+                TEST_METRICS["Accuracy"],
+
+            "Test_Sensitivity":
+                TEST_METRICS["Sensitivity"],
+
+            "Test_Specificity":
+                TEST_METRICS["Specificity"],
+
+            "Test_Balanced_Accuracy":
+                TEST_METRICS["Balanced_Accuracy"],
+
+            "Test_PPV":
+                TEST_METRICS["PPV"],
+
+            "Test_NPV":
+                TEST_METRICS["NPV"],
+
+            "TP":
+                TEST_METRICS["TP"],
+
+            "FN":
+                TEST_METRICS["FN"],
+
+            "TN":
+                TEST_METRICS["TN"],
+
+            "FP":
+                TEST_METRICS["FP"]
+        }
+    ]
+)
+
+
+print(
+    "\n"
+    +
+    "=" * 180
+)
+
+print(
+    "ONLY KERNEL SIZE + Z-SCORE | FINAL SUMMARY"
+)
+
+print(
+    "=" * 180
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(
+        index=False
+    )
+)
+
+
+OUTPUT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_Kernel_NewSplit_Zscore"
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+fold_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_fold_summary.csv",
+
+    index=False
+)
+
+oof_df_kernel.to_csv(
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_OOF_scores.csv",
+
+    index=False
+)
+
+history_df.to_csv(
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_training_history.csv",
+
+    index=False
+)
+
+test_predictions = pd.DataFrame(
+    {
+        "psam_IID":
+            final_test_ids,
+
+        "true_label":
+            final_test_labels,
+
+        "raw_probability":
+            final_test_probs,
+
+        "z_score":
+            test_z_scores,
+
+        "predicted_label":
+            (
+                test_z_scores
+                >=
+                FIXED_Z_THRESHOLD
+            ).astype(int)
+    }
+)
+
+test_predictions.to_csv(
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_Test30_predictions.csv",
+
+    index=False
+)
+
+final_summary.to_csv(
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_Final_Summary.csv",
+
+    index=False
+)
+
+torch.save(
+    final_model.state_dict(),
+    OUTPUT_DIR
+    /
+    "Kernel_Zscore_Final_Model.pt"
+)
+
+print(
+    "\nResults saved to:"
+)
+
+print(
+    OUTPUT_DIR
+)
+
+
+#-------------------------threshold 不固定---------------------------#
+#small+kernal size但threshold不同
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+from sklearn.metrics import roc_auc_score
+
+
+RESULT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_SmallChannel_Kernel_NewSplit_Zscore"
+)
+
+OOF_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_OOF_scores.csv"
+)
+
+TEST_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_Test30_predictions.csv"
+)
+
+FOLD_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_Zscore_fold_summary.csv"
+)
+
+oof_df = pd.read_csv(OOF_PATH)
+test_df = pd.read_csv(TEST_PATH)
+fold_summary = pd.read_csv(FOLD_PATH)
+
+
+def threshold_metrics(y_true, scores, threshold):
+
+    y_true = np.asarray(y_true, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+
+    y_pred = (
+        scores >= threshold
+    ).astype(int)
+
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else np.nan
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
+    accuracy = (tp + tn) / len(y_true)
+    balanced_accuracy = (sensitivity + specificity) / 2
+
+    ppv = tp / (tp + fp) if (tp + fp) > 0 else np.nan
+    npv = tn / (tn + fn) if (tn + fn) > 0 else np.nan
+
+    return {
+        "Threshold": float(threshold),
+        "AUC": roc_auc_score(y_true, scores),
+        "Accuracy": accuracy,
+        "Sensitivity": sensitivity,
+        "Specificity": specificity,
+        "Balanced_Accuracy": balanced_accuracy,
+        "PPV": ppv,
+        "NPV": npv,
+        "TP": tp,
+        "FN": fn,
+        "TN": tn,
+        "FP": fp
+    }
+
+
+oof_scores = np.asarray(
+    oof_df["oof_z_score"],
+    dtype=float
+)
+
+oof_labels = np.asarray(
+    oof_df["true_label"],
+    dtype=int
+)
+
+unique_scores = np.sort(
+    np.unique(oof_scores)
+)
+
+midpoints = (
+    unique_scores[:-1]
+    +
+    unique_scores[1:]
+) / 2
+
+candidate_thresholds = midpoints[
+    (midpoints >= -1)
+    &
+    (midpoints <= 1)
+]
+
+candidate_thresholds = np.unique(
+    np.concatenate(
+        [
+            [-1.0],
+            candidate_thresholds,
+            [0.0],
+            [1.0]
+        ]
+    )
+)
+
+records = []
+
+for threshold in candidate_thresholds:
+
+    m = threshold_metrics(
+        oof_labels,
+        oof_scores,
+        threshold
+    )
+
+    m["Sens_Spec_Difference"] = abs(
+        m["Sensitivity"]
+        -
+        m["Specificity"]
+    )
+
+    records.append(m)
+
+threshold_candidates = pd.DataFrame(records)
+
+max_ba = threshold_candidates[
+    "Balanced_Accuracy"
+].max()
+
+best_candidates = (
+    threshold_candidates[
+        np.isclose(
+            threshold_candidates["Balanced_Accuracy"],
+            max_ba,
+            atol=1e-12
+        )
+    ]
+    .copy()
+)
+
+min_diff = best_candidates[
+    "Sens_Spec_Difference"
+].min()
+
+best_candidates = (
+    best_candidates[
+        np.isclose(
+            best_candidates["Sens_Spec_Difference"],
+            min_diff,
+            atol=1e-12
+        )
+    ]
+    .sort_values("Threshold")
+    .reset_index(drop=True)
+)
+
+selected_row = best_candidates.iloc[
+    len(best_candidates) // 2
+]
+
+SELECTED_THRESHOLD = float(
+    selected_row["Threshold"]
+)
+
+print(
+    "Selected threshold =",
+    SELECTED_THRESHOLD
+)
+
+
+comparison_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold_type, threshold in [
+
+        ("Selected", SELECTED_THRESHOLD),
+        ("Baseline 0", 0.0)
+
+    ]:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        comparison_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold_Type": threshold_type,
+                **m
+            }
+        )
+
+comparison_df = pd.DataFrame(
+    comparison_records
+)
+
+print(
+    "\nSMALL CHANNEL + KERNEL SIZE"
+)
+
+print(
+    comparison_df
+    .round(4)
+    .to_string(index=False)
+)
+
+
+PLOT_THRESHOLDS = np.arange(
+    -1,
+    1.0001,
+    0.02
+)
+
+PLOT_THRESHOLDS = np.unique(
+    np.concatenate(
+        [
+            PLOT_THRESHOLDS,
+            [SELECTED_THRESHOLD, 0.0]
+        ]
+    )
+)
+
+curve_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold in PLOT_THRESHOLDS:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        curve_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold": threshold,
+                "Sensitivity": m["Sensitivity"],
+                "Specificity": m["Specificity"],
+                "PPV": m["PPV"],
+                "NPV": m["NPV"]
+            }
+        )
+
+curve_df = pd.DataFrame(
+    curve_records
+)
+
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(14, 5),
+    sharey=True
+)
+
+for ax, dataset_name in zip(
+    axes,
+    ["Validation OOF", "Test30"]
+):
+
+    tmp = curve_df[
+        curve_df["Dataset"]
+        ==
+        dataset_name
+    ]
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Sensitivity"],
+        label="Sensitivity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Specificity"],
+        label="Specificity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["PPV"],
+        label="PPV"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["NPV"],
+        label="NPV"
+    )
+
+    ax.axvline(
+        SELECTED_THRESHOLD,
+        linestyle="--",
+        label=f"Selected = {SELECTED_THRESHOLD:.3f}"
+    )
+
+    ax.axvline(
+        -0.2637116432,
+        linestyle=":",
+        label="Baseline = -0.2637116432"
+    )
+
+    ax.set_title(dataset_name)
+    ax.set_xlabel("Z-score Threshold")
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(0, 1.05)
+    ax.grid(alpha=0.3)
+
+axes[0].set_ylabel(
+    "Performance Metric"
+)
+
+handles, labels = axes[0].get_legend_handles_labels()
+
+fig.legend(
+    handles,
+    labels,
+    loc="lower center",
+    ncol=6,
+    bbox_to_anchor=(0.5, -0.03)
+)
+
+plt.tight_layout(
+    rect=[0, 0.08, 1, 1]
+)
+
+plt.savefig(
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_OwnThreshold.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+oof_selected = threshold_metrics(
+    oof_df["true_label"],
+    oof_df["oof_z_score"],
+    SELECTED_THRESHOLD
+)
+
+test_selected = threshold_metrics(
+    test_df["true_label"],
+    test_df["z_score"],
+    SELECTED_THRESHOLD
+)
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model": "Small Channel + Kernel Size",
+            "Selected_Threshold": SELECTED_THRESHOLD,
+            "Mean_Train_AUC": fold_summary["train_auc"].mean(),
+            "SD_Train_AUC": fold_summary["train_auc"].std(ddof=1),
+            "Mean_Validation_AUC": fold_summary["val_auc"].mean(),
+            "SD_Validation_AUC": fold_summary["val_auc"].std(ddof=1),
+            "OOF_Z_AUC": oof_selected["AUC"],
+            "OOF_Accuracy": oof_selected["Accuracy"],
+            "OOF_Sensitivity": oof_selected["Sensitivity"],
+            "OOF_Specificity": oof_selected["Specificity"],
+            "OOF_BA": oof_selected["Balanced_Accuracy"],
+            "OOF_PPV": oof_selected["PPV"],
+            "OOF_NPV": oof_selected["NPV"],
+            "Test_AUC": test_selected["AUC"],
+            "Test_Accuracy": test_selected["Accuracy"],
+            "Test_Sensitivity": test_selected["Sensitivity"],
+            "Test_Specificity": test_selected["Specificity"],
+            "Test_BA": test_selected["Balanced_Accuracy"],
+            "Test_PPV": test_selected["PPV"],
+            "Test_NPV": test_selected["NPV"],
+            "TP": test_selected["TP"],
+            "FN": test_selected["FN"],
+            "TN": test_selected["TN"],
+            "FP": test_selected["FP"]
+        }
+    ]
+)
+
+print(
+    "\nFINAL SUMMARY"
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(index=False)
+)
+
+threshold_candidates.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_OwnThreshold_Candidates.csv",
+    index=False
+)
+
+comparison_df.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_OwnThreshold_Comparison.csv",
+    index=False
+)
+
+final_summary.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_Kernel_OwnThreshold_FinalSummary.csv",
+    index=False
+)
+
+
+##only small channel 但threshold不同
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+from sklearn.metrics import roc_auc_score
+
+
+RESULT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_SmallChannel_NewSplit_Zscore"
+)
+
+OOF_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Zscore_OOF_scores.csv"
+)
+
+TEST_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Zscore_Test30_predictions.csv"
+)
+
+FOLD_PATH = (
+    RESULT_DIR
+    /
+    "SmallChannel_Zscore_fold_summary.csv"
+)
+
+oof_df = pd.read_csv(OOF_PATH)
+test_df = pd.read_csv(TEST_PATH)
+fold_summary = pd.read_csv(FOLD_PATH)
+
+
+def threshold_metrics(y_true, scores, threshold):
+
+    y_true = np.asarray(y_true, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+
+    y_pred = (
+        scores >= threshold
+    ).astype(int)
+
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else np.nan
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
+    accuracy = (tp + tn) / len(y_true)
+    balanced_accuracy = (sensitivity + specificity) / 2
+
+    ppv = tp / (tp + fp) if (tp + fp) > 0 else np.nan
+    npv = tn / (tn + fn) if (tn + fn) > 0 else np.nan
+
+    return {
+        "Threshold": float(threshold),
+        "AUC": roc_auc_score(y_true, scores),
+        "Accuracy": accuracy,
+        "Sensitivity": sensitivity,
+        "Specificity": specificity,
+        "Balanced_Accuracy": balanced_accuracy,
+        "PPV": ppv,
+        "NPV": npv,
+        "TP": tp,
+        "FN": fn,
+        "TN": tn,
+        "FP": fp
+    }
+
+
+oof_scores = np.asarray(
+    oof_df["oof_z_score"],
+    dtype=float
+)
+
+oof_labels = np.asarray(
+    oof_df["true_label"],
+    dtype=int
+)
+
+unique_scores = np.sort(
+    np.unique(oof_scores)
+)
+
+midpoints = (
+    unique_scores[:-1]
+    +
+    unique_scores[1:]
+) / 2
+
+candidate_thresholds = midpoints[
+    (midpoints >= -1)
+    &
+    (midpoints <= 1)
+]
+
+candidate_thresholds = np.unique(
+    np.concatenate(
+        [
+            [-1.0],
+            candidate_thresholds,
+            [0.0],
+            [1.0]
+        ]
+    )
+)
+
+records = []
+
+for threshold in candidate_thresholds:
+
+    m = threshold_metrics(
+        oof_labels,
+        oof_scores,
+        threshold
+    )
+
+    m["Sens_Spec_Difference"] = abs(
+        m["Sensitivity"]
+        -
+        m["Specificity"]
+    )
+
+    records.append(m)
+
+threshold_candidates = pd.DataFrame(records)
+
+max_ba = threshold_candidates[
+    "Balanced_Accuracy"
+].max()
+
+best_candidates = (
+    threshold_candidates[
+        np.isclose(
+            threshold_candidates["Balanced_Accuracy"],
+            max_ba,
+            atol=1e-12
+        )
+    ]
+    .copy()
+)
+
+min_diff = best_candidates[
+    "Sens_Spec_Difference"
+].min()
+
+best_candidates = (
+    best_candidates[
+        np.isclose(
+            best_candidates["Sens_Spec_Difference"],
+            min_diff,
+            atol=1e-12
+        )
+    ]
+    .sort_values("Threshold")
+    .reset_index(drop=True)
+)
+
+selected_row = best_candidates.iloc[
+    len(best_candidates) // 2
+]
+
+SELECTED_THRESHOLD = float(
+    selected_row["Threshold"]
+)
+
+print(
+    "Selected threshold =",
+    SELECTED_THRESHOLD
+)
+
+
+comparison_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold_type, threshold in [
+
+        ("Selected", SELECTED_THRESHOLD),
+        ("Baseline 0", 0.0)
+
+    ]:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        comparison_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold_Type": threshold_type,
+                **m
+            }
+        )
+
+comparison_df = pd.DataFrame(
+    comparison_records
+)
+
+print(
+    "\nONLY SMALL CHANNEL"
+)
+
+print(
+    comparison_df
+    .round(4)
+    .to_string(index=False)
+)
+
+
+PLOT_THRESHOLDS = np.arange(
+    -1,
+    1.0001,
+    0.02
+)
+
+PLOT_THRESHOLDS = np.unique(
+    np.concatenate(
+        [
+            PLOT_THRESHOLDS,
+            [SELECTED_THRESHOLD, 0.0]
+        ]
+    )
+)
+
+curve_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold in PLOT_THRESHOLDS:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        curve_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold": threshold,
+                "Sensitivity": m["Sensitivity"],
+                "Specificity": m["Specificity"],
+                "PPV": m["PPV"],
+                "NPV": m["NPV"]
+            }
+        )
+
+curve_df = pd.DataFrame(
+    curve_records
+)
+
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(14, 5),
+    sharey=True
+)
+
+for ax, dataset_name in zip(
+    axes,
+    ["Validation OOF", "Test30"]
+):
+
+    tmp = curve_df[
+        curve_df["Dataset"]
+        ==
+        dataset_name
+    ]
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Sensitivity"],
+        label="Sensitivity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Specificity"],
+        label="Specificity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["PPV"],
+        label="PPV"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["NPV"],
+        label="NPV"
+    )
+
+    ax.axvline(
+        SELECTED_THRESHOLD,
+        linestyle="--",
+        label=f"Selected = {SELECTED_THRESHOLD:.3f}"
+    )
+
+    ax.axvline(
+        -0.2637116432,
+        linestyle=":",
+        label="Baseline = -0.2637116432"
+    )
+
+    ax.set_title(dataset_name)
+    ax.set_xlabel("Z-score Threshold")
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(0, 1.05)
+    ax.grid(alpha=0.3)
+
+axes[0].set_ylabel(
+    "Performance Metric"
+)
+
+handles, labels = axes[0].get_legend_handles_labels()
+
+fig.legend(
+    handles,
+    labels,
+    loc="lower center",
+    ncol=6,
+    bbox_to_anchor=(0.5, -0.03)
+)
+
+plt.tight_layout(
+    rect=[0, 0.08, 1, 1]
+)
+
+plt.savefig(
+    RESULT_DIR
+    /
+    "SmallChannel_OwnThreshold.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+oof_selected = threshold_metrics(
+    oof_df["true_label"],
+    oof_df["oof_z_score"],
+    SELECTED_THRESHOLD
+)
+
+test_selected = threshold_metrics(
+    test_df["true_label"],
+    test_df["z_score"],
+    SELECTED_THRESHOLD
+)
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model": "Only Small Channel",
+            "Selected_Threshold": SELECTED_THRESHOLD,
+            "Mean_Train_AUC": fold_summary["train_auc"].mean(),
+            "SD_Train_AUC": fold_summary["train_auc"].std(ddof=1),
+            "Mean_Validation_AUC": fold_summary["val_auc"].mean(),
+            "SD_Validation_AUC": fold_summary["val_auc"].std(ddof=1),
+            "OOF_Z_AUC": oof_selected["AUC"],
+            "OOF_Accuracy": oof_selected["Accuracy"],
+            "OOF_Sensitivity": oof_selected["Sensitivity"],
+            "OOF_Specificity": oof_selected["Specificity"],
+            "OOF_BA": oof_selected["Balanced_Accuracy"],
+            "OOF_PPV": oof_selected["PPV"],
+            "OOF_NPV": oof_selected["NPV"],
+            "Test_AUC": test_selected["AUC"],
+            "Test_Accuracy": test_selected["Accuracy"],
+            "Test_Sensitivity": test_selected["Sensitivity"],
+            "Test_Specificity": test_selected["Specificity"],
+            "Test_BA": test_selected["Balanced_Accuracy"],
+            "Test_PPV": test_selected["PPV"],
+            "Test_NPV": test_selected["NPV"],
+            "TP": test_selected["TP"],
+            "FN": test_selected["FN"],
+            "TN": test_selected["TN"],
+            "FP": test_selected["FP"]
+        }
+    ]
+)
+
+print(
+    "\nFINAL SUMMARY"
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(index=False)
+)
+
+threshold_candidates.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_OwnThreshold_Candidates.csv",
+    index=False
+)
+
+comparison_df.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_OwnThreshold_Comparison.csv",
+    index=False
+)
+
+final_summary.to_csv(
+    RESULT_DIR
+    /
+    "SmallChannel_OwnThreshold_FinalSummary.csv",
+    index=False
+)
+
+
+
+#------------------
+#only kernal size 但threshold不同
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+from sklearn.metrics import roc_auc_score
+
+
+RESULT_DIR = Path(
+    "/Users/sheenazhengmei/Desktop/DNA Image/"
+    "V6_Kernel_NewSplit_Zscore"
+)
+
+OOF_PATH = (
+    RESULT_DIR
+    /
+    "Kernel_Zscore_OOF_scores.csv"
+)
+
+TEST_PATH = (
+    RESULT_DIR
+    /
+    "Kernel_Zscore_Test30_predictions.csv"
+)
+
+FOLD_PATH = (
+    RESULT_DIR
+    /
+    "Kernel_Zscore_fold_summary.csv"
+)
+
+oof_df = pd.read_csv(OOF_PATH)
+test_df = pd.read_csv(TEST_PATH)
+fold_summary = pd.read_csv(FOLD_PATH)
+
+
+def threshold_metrics(y_true, scores, threshold):
+
+    y_true = np.asarray(y_true, dtype=int)
+    scores = np.asarray(scores, dtype=float)
+
+    y_pred = (
+        scores >= threshold
+    ).astype(int)
+
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+
+    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else np.nan
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
+    accuracy = (tp + tn) / len(y_true)
+    balanced_accuracy = (sensitivity + specificity) / 2
+
+    ppv = tp / (tp + fp) if (tp + fp) > 0 else np.nan
+    npv = tn / (tn + fn) if (tn + fn) > 0 else np.nan
+
+    return {
+        "Threshold": float(threshold),
+        "AUC": roc_auc_score(y_true, scores),
+        "Accuracy": accuracy,
+        "Sensitivity": sensitivity,
+        "Specificity": specificity,
+        "Balanced_Accuracy": balanced_accuracy,
+        "PPV": ppv,
+        "NPV": npv,
+        "TP": tp,
+        "FN": fn,
+        "TN": tn,
+        "FP": fp
+    }
+
+
+oof_scores = np.asarray(
+    oof_df["oof_z_score"],
+    dtype=float
+)
+
+oof_labels = np.asarray(
+    oof_df["true_label"],
+    dtype=int
+)
+
+unique_scores = np.sort(
+    np.unique(oof_scores)
+)
+
+midpoints = (
+    unique_scores[:-1]
+    +
+    unique_scores[1:]
+) / 2
+
+candidate_thresholds = midpoints[
+    (midpoints >= -1)
+    &
+    (midpoints <= 1)
+]
+
+candidate_thresholds = np.unique(
+    np.concatenate(
+        [
+            [-1.0],
+            candidate_thresholds,
+            [0.0],
+            [1.0]
+        ]
+    )
+)
+
+records = []
+
+for threshold in candidate_thresholds:
+
+    m = threshold_metrics(
+        oof_labels,
+        oof_scores,
+        threshold
+    )
+
+    m["Sens_Spec_Difference"] = abs(
+        m["Sensitivity"]
+        -
+        m["Specificity"]
+    )
+
+    records.append(m)
+
+threshold_candidates = pd.DataFrame(records)
+
+max_ba = threshold_candidates[
+    "Balanced_Accuracy"
+].max()
+
+best_candidates = (
+    threshold_candidates[
+        np.isclose(
+            threshold_candidates["Balanced_Accuracy"],
+            max_ba,
+            atol=1e-12
+        )
+    ]
+    .copy()
+)
+
+min_diff = best_candidates[
+    "Sens_Spec_Difference"
+].min()
+
+best_candidates = (
+    best_candidates[
+        np.isclose(
+            best_candidates["Sens_Spec_Difference"],
+            min_diff,
+            atol=1e-12
+        )
+    ]
+    .sort_values("Threshold")
+    .reset_index(drop=True)
+)
+
+selected_row = best_candidates.iloc[
+    len(best_candidates) // 2
+]
+
+SELECTED_THRESHOLD = float(
+    selected_row["Threshold"]
+)
+
+print(
+    "Selected threshold =",
+    SELECTED_THRESHOLD
+)
+
+
+comparison_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold_type, threshold in [
+
+        ("Selected", SELECTED_THRESHOLD),
+        ("Baseline 0", 0.0)
+
+    ]:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        comparison_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold_Type": threshold_type,
+                **m
+            }
+        )
+
+comparison_df = pd.DataFrame(
+    comparison_records
+)
+
+print(
+    "\nONLY KERNEL SIZE"
+)
+
+print(
+    comparison_df
+    .round(4)
+    .to_string(index=False)
+)
+
+
+PLOT_THRESHOLDS = np.arange(
+    -1,
+    1.0001,
+    0.02
+)
+
+PLOT_THRESHOLDS = np.unique(
+    np.concatenate(
+        [
+            PLOT_THRESHOLDS,
+            [SELECTED_THRESHOLD, 0.0]
+        ]
+    )
+)
+
+curve_records = []
+
+for dataset_name, labels, scores in [
+
+    (
+        "Validation OOF",
+        oof_df["true_label"],
+        oof_df["oof_z_score"]
+    ),
+
+    (
+        "Test30",
+        test_df["true_label"],
+        test_df["z_score"]
+    )
+
+]:
+
+    for threshold in PLOT_THRESHOLDS:
+
+        m = threshold_metrics(
+            labels,
+            scores,
+            threshold
+        )
+
+        curve_records.append(
+            {
+                "Dataset": dataset_name,
+                "Threshold": threshold,
+                "Sensitivity": m["Sensitivity"],
+                "Specificity": m["Specificity"],
+                "PPV": m["PPV"],
+                "NPV": m["NPV"]
+            }
+        )
+
+curve_df = pd.DataFrame(
+    curve_records
+)
+
+fig, axes = plt.subplots(
+    1,
+    2,
+    figsize=(14, 5),
+    sharey=True
+)
+
+for ax, dataset_name in zip(
+    axes,
+    ["Validation OOF", "Test30"]
+):
+
+    tmp = curve_df[
+        curve_df["Dataset"]
+        ==
+        dataset_name
+    ]
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Sensitivity"],
+        label="Sensitivity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["Specificity"],
+        label="Specificity"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["PPV"],
+        label="PPV"
+    )
+
+    ax.plot(
+        tmp["Threshold"],
+        tmp["NPV"],
+        label="NPV"
+    )
+
+    ax.axvline(
+        SELECTED_THRESHOLD,
+        linestyle="--",
+        label=f"Selected = {SELECTED_THRESHOLD:.3f}"
+    )
+
+    ax.axvline(
+        -0.2637116432,
+        linestyle=":",
+        label="Baseline =-0.2637116432"
+    )
+
+    ax.set_title(dataset_name)
+    ax.set_xlabel("Z-score Threshold")
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(0, 1.05)
+    ax.grid(alpha=0.3)
+
+axes[0].set_ylabel(
+    "Performance Metric"
+)
+
+handles, labels = axes[0].get_legend_handles_labels()
+
+fig.legend(
+    handles,
+    labels,
+    loc="lower center",
+    ncol=6,
+    bbox_to_anchor=(0.5, -0.03)
+)
+
+plt.tight_layout(
+    rect=[0, 0.08, 1, 1]
+)
+
+plt.savefig(
+    RESULT_DIR
+    /
+    "Kernel_OwnThreshold.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+
+oof_selected = threshold_metrics(
+    oof_df["true_label"],
+    oof_df["oof_z_score"],
+    SELECTED_THRESHOLD
+)
+
+test_selected = threshold_metrics(
+    test_df["true_label"],
+    test_df["z_score"],
+    SELECTED_THRESHOLD
+)
+
+final_summary = pd.DataFrame(
+    [
+        {
+            "Model": "Only Kernel Size",
+            "Selected_Threshold": SELECTED_THRESHOLD,
+            "Mean_Train_AUC": fold_summary["train_auc"].mean(),
+            "SD_Train_AUC": fold_summary["train_auc"].std(ddof=1),
+            "Mean_Validation_AUC": fold_summary["val_auc"].mean(),
+            "SD_Validation_AUC": fold_summary["val_auc"].std(ddof=1),
+            "OOF_Z_AUC": oof_selected["AUC"],
+            "OOF_Accuracy": oof_selected["Accuracy"],
+            "OOF_Sensitivity": oof_selected["Sensitivity"],
+            "OOF_Specificity": oof_selected["Specificity"],
+            "OOF_BA": oof_selected["Balanced_Accuracy"],
+            "OOF_PPV": oof_selected["PPV"],
+            "OOF_NPV": oof_selected["NPV"],
+            "Test_AUC": test_selected["AUC"],
+            "Test_Accuracy": test_selected["Accuracy"],
+            "Test_Sensitivity": test_selected["Sensitivity"],
+            "Test_Specificity": test_selected["Specificity"],
+            "Test_BA": test_selected["Balanced_Accuracy"],
+            "Test_PPV": test_selected["PPV"],
+            "Test_NPV": test_selected["NPV"],
+            "TP": test_selected["TP"],
+            "FN": test_selected["FN"],
+            "TN": test_selected["TN"],
+            "FP": test_selected["FP"]
+        }
+    ]
+)
+
+print(
+    "\nFINAL SUMMARY"
+)
+
+print(
+    final_summary
+    .round(4)
+    .to_string(index=False)
+)
+
+threshold_candidates.to_csv(
+    RESULT_DIR
+    /
+    "Kernel_OwnThreshold_Candidates.csv",
+    index=False
+)
+
+comparison_df.to_csv(
+    RESULT_DIR
+    /
+    "Kernel_OwnThreshold_Comparison.csv",
+    index=False
+)
+
+final_summary.to_csv(
+    RESULT_DIR
+    /
+    "Kernel_OwnThreshold_FinalSummary.csv",
+    index=False
+)
+
+
+
+
+
+
+
+
