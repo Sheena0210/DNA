@@ -9,13 +9,10 @@ import numpy as np
 from pathlib import Path
 
 
-# ------------------------------------------------------------
-# Step 1：讀取R輸出的150人 nucleotide genotype
-# ------------------------------------------------------------
+# Step 1：讀取150人 nucleotide genotype
 
 file_path = Path.home() / "Desktop" / "segment_haplotype_step2" / \
     "Chr1_Segment1_Block1_nucleotide_genotype_150.csv"
-
 
 geno_df = pd.read_csv(
     file_path,
@@ -23,12 +20,12 @@ geno_df = pd.read_csv(
 )
 
 
-print("Number of subjects =", geno_df.shape[0])
-print("Number of SNPs =", geno_df.shape[1])
+print("Number of subjects =", geno_df.shape[0]) #人數
+print("Number of SNPs =", geno_df.shape[1]) #snp 數量
 
-print(geno_df.iloc[:5, :10])
 
-##step2 把 nucleotide genotype 轉成{}的形式
+#step2 把 nucleotide genotype 轉成{}的形式---------
+#看這個genotype 上有哪謝allele 集合
 
 ALLELES = ("A", "C", "G", "T")
 
@@ -38,26 +35,26 @@ def genotype_to_alleles(genotype):
     if pd.isna(genotype):
         return set()
 
-    genotype = str(genotype)
+    genotype = str(genotype) #字串
 
     if genotype == "NoCall":
         return set()
 
-    parts = genotype.split("/")
+    parts = genotype.split("/") #如果allele中有/就拆開 得到['','']
 
     if len(parts) != 2:
-        return set()
+        return set()    #確保輸入的allele不是a/g用/區隔 而是原本是ag的型態 所以如果part長度不是2就是回傳空集合
 
-    return set(parts)
+    return set(part)  #set中相同元素只會保留一個 所以['a','a']->{'a'}, 然後先後順序不同也會得到相同的{'',''}
 
-
-#測試
 print(genotype_to_alleles("A/A"))
 print(genotype_to_alleles("A/G"))
 print(genotype_to_alleles("C/T"))
 print(genotype_to_alleles("NoCall"))
 
-#step3 建立每個 SNP × 每個 allele 的 supporter matrix
+
+
+#step3 建立每個 SNP × 每個 allele 的 supporter matrix----------------
 
 #
 # 某一顆SNP：
@@ -80,7 +77,7 @@ print(genotype_to_alleles("NoCall"))
 #
 # 之後我們建立完整haplotype時，
 # 就可以一路把不同SNP的support取交集，
-# 找出「哪些人同時支持整條haplotype
+# 找出哪些人同時支持整條haplotype
 
 #150人的數量
 n_subjects = geno_df.shape[0]
@@ -131,23 +128,8 @@ for j in range(n_snps):
     genotypes = geno_df.iloc[:, j]
 
 
-    # --------------------------------------------------------
-    # 6. 把每個人的genotype轉成允許的allele集合
-    # --------------------------------------------------------
-    #
-    #例如：
-    #
-    #A/A -> {"A"}
-    #A/G -> {"A","G"}
-    #G/G -> {"G"}
-    #
-    #這裡使用前面建立的genotype_to_alleles()
-    # --------------------------------------------------------
-
-    allele_sets = [
-        genotype_to_alleles(g)
-        for g in genotypes
-    ]
+    #把這顆 SNP 上每個人的 genotype 轉成集合
+    allele_sets = [genotype_to_alleles(g)for g in genotypes]
 
 
     # --------------------------------------------------------
@@ -211,15 +193,12 @@ print(
     "Number of subjects =",
     n_subjects
 )
-# ============================================================
-# QC：查看第1顆SNP有多少人支持A/C/G/T
-# ============================================================
 
 print(
     "First SNP ID =",
     snp_ids[0]
 )
-
+#主要是去看這一個snp 有多少人一樣
 for allele in ALLELES:
 
     #True加總後就是支持這個allele的人數
@@ -233,24 +212,14 @@ for allele in ALLELES:
 #每往下一顆 SNP，就把目前仍支持這條haplotype 的和支持下一個 allele 的人取交集
 #如果最後只剩 0 或 1 個人，就直接停止這條 branch，不再往後搜尋
 
-# ============================================================
+
 # Step 4：搜尋至少2人共同支持的完整candidate haplotypes
-# ============================================================
-#
-# 目前：
-#
 # n_subjects = 150
 # n_snps = 206
-#
-# support_masks[j][allele]
-# 已經告訴我們：
-#
+
 # 第j顆SNP中，
 # 哪些subjects的genotype允許allele A/C/G/T
-#
-#
-# 現在要做的是：
-#
+
 # SNP1選一個allele
 # ↓
 # 找哪些人支持
@@ -274,16 +243,10 @@ for allele in ALLELES:
 # ------------------------------------------------------------
 # 1. 設定minimum support
 # ------------------------------------------------------------
-#
-# 我們現在的目標是找：
-# 「至少有2個人共同支持」的candidate haplotype
-#
-# 所以設定：
-# min_support = 2
-#
+# 我們現在的目標是找：「至少有2個人共同支持」的candidate haplotype
+# 所以設定：min_support = 2
 # 如果某個partial haplotype只剩1人支持，
 # 就不需要再往後延伸
-# ------------------------------------------------------------
 
 min_support = 2
 
@@ -291,29 +254,16 @@ min_support = 2
 # ------------------------------------------------------------
 # 2. 設定安全上限
 # ------------------------------------------------------------
-#
 # 理論空間是2^206，非常巨大。
-#
-# 雖然我們會prune，
-# 但為了避免某些資料真的產生大量branches，
-# 先設定最大搜尋node數。
-#
-# 一個node可以理解成：
-# 「目前已經形成到某一顆SNP的partial haplotype」
-# ------------------------------------------------------------
-
+# 一個node可以理解成：目前已經形成到某一顆SNP的partial haplotype」
 max_nodes = 5_000_000
 
 
 # ------------------------------------------------------------
 # 3. 設定最多儲存多少條完整candidate haplotypes
 # ------------------------------------------------------------
-#
-# 如果真的有非常大量完整candidate haplotypes，
-# 不希望一次把記憶體塞滿。
-#
-# 先設定最多存100,000條。
-# ------------------------------------------------------------
+#如果真的有非常大量完整candidate haplotypes，不希望一次把記憶體塞滿。
+#先設定最多存100,000條。
 
 max_results = 100_000
 
@@ -321,28 +271,16 @@ max_results = 100_000
 # ------------------------------------------------------------
 # 4. 建立搜尋stack
 # ------------------------------------------------------------
-#
 # stack中的每一筆資料包含3個東西：
 #
 # 1. snp_index
 #    下一步要處理第幾顆SNP
-#
 # 2. haplotype_prefix
 #    目前已經形成的haplotype sequence
-#
 # 3. supporter mask
 #    目前仍然支持這條haplotype的subjects
-#
-#
-# 一開始：
-#
-# 還沒有選任何SNP
-# 所以：
-#
-# snp_index = 0
-# haplotype_prefix = ""
-#
-# 並且150人全部都是potential supporters
+# 一開始：還沒有選任何SNP
+# 所以：snp_index = 0 haplotype_prefix = "" 並且150人全部都是potential supporters
 # ------------------------------------------------------------
 
 stack = [
@@ -353,117 +291,41 @@ stack = [
     )
 ]
 
-
-# ------------------------------------------------------------
-# 5. 建立results
-# ------------------------------------------------------------
-#
-# 最後完整走完206顆SNP的candidate haplotypes
-# 會放進這個list
-# ------------------------------------------------------------
-
+# 5. 建立results:最後完整走完206顆SNP的candidate haplotypes會放進這個list
 results = []
 
-
-# ------------------------------------------------------------
 # 6. 記錄總共搜尋過多少nodes
-# ------------------------------------------------------------
-
 nodes_visited = 0
 
-# ============================================================
-# 7. 開始pruning search
-# ============================================================
+# --------------------------------------------------------
+# 從stack取出目前要處理的一條partial haplotype
+# --------------------------------------------------------
+#stack.pop()會取出最後加入的一筆
+#得到：snp_index = 下一顆要處理的SNP位置
+# prefix= 目前已經形成的haplotype sequence
+# current_support = 目前仍支持這條sequence的subjects
 
 while stack:
-
-    # --------------------------------------------------------
-    # 從stack取出目前要處理的一條partial haplotype
-    # --------------------------------------------------------
-    #
-    # stack.pop()會取出最後加入的一筆
-    #
-    # 得到：
-    #
-    # snp_index
-    # = 下一顆要處理的SNP位置
-    #
-    # prefix
-    # = 目前已經形成的haplotype sequence
-    #
-    # current_support
-    # = 目前仍支持這條sequence的subjects
-    # --------------------------------------------------------
-
     snp_index, prefix, current_support = stack.pop()
-
-
-    #每取出一個node就記錄一次
-    nodes_visited += 1
-
-
-    # --------------------------------------------------------
-    # 8. 安全檢查：搜尋node太多時停止
-    # --------------------------------------------------------
-
+    nodes_visited += 1   #每取出一個node就記錄一次
     if nodes_visited > max_nodes:
-
-        print(
-            "STOP: maximum search nodes reached =",
-            max_nodes
-        )
-
+        print("STOP: maximum search nodes reached =",max_nodes)
         break
-
-
-    # --------------------------------------------------------
-    # 9. 判斷是否已經走完整個Block
-    # --------------------------------------------------------
-    #
-    # 如果：
-    #
-    # snp_index == n_snps
-    #
-    # 代表206顆SNP全部都已經選完allele。
-    #
-    # 此時prefix就是一條完整candidate haplotype。
-    # --------------------------------------------------------
+# --------------------------------------------------------
+# 9. 判斷是否已經走完整個Block
+# --------------------------------------------------------
+# 如果：snp_index == n_snps 代表206顆SNP全部都已經選完allele, 此時prefix就是一條完整candidate haplotype。
 
     if snp_index == n_snps:
-
-        #計算目前仍有多少subjects支持這條完整haplotype
-        support_n = int(
-            current_support.sum()
-        )
-
-
+        support_n = int(current_support.sum()) #計算目前仍有多少subjects支持這條完整haplotype
         #把完整candidate haplotype存起來
         results.append(
-            {
-
-                #完整206-SNP allele sequence
-                "haplotype": prefix,
-
-                #有多少subjects可以支持這條candidate haplotype
-                "support_n": support_n,
-
-                #以150人為denominator
-                "frequency_150":
-                    support_n / n_subjects,
-
-                #記錄實際有哪些subjects支持
-                "support_samples":
-                    ",".join(
-                        sample_ids[current_support]
-                    )
-            }
+               {"haplotype": prefix,#完整206-SNP allele sequence
+                "support_n": support_n, #有多少subjects可以支持這條candidate haplotype
+                "frequency_150":support_n / n_subjects,
+                "support_samples": ",".join(sample_ids[current_support])
+               }
         )
-
-
-        # ----------------------------------------------------
-        # 如果完整candidate haplotype太多
-        # 達到我們設定的安全上限，就停止
-        # ----------------------------------------------------
 
         if len(results) >= max_results:
 
@@ -474,125 +336,45 @@ while stack:
 
             break
 
-
-        #這條完整haplotype已經處理完成
-        #回到while stack處理下一條branch
-        continue
-
-
     # --------------------------------------------------------
     # 10. 處理目前這一顆SNP
     # --------------------------------------------------------
-    #
     # 嘗試A / C / G / T四種allele
-    #
-    # 但如果某個allele在這顆SNP根本沒有人支持，
-    # 後面自然會直接被prune掉
-    # --------------------------------------------------------
+    # 但如果某個allele在這顆SNP根本沒有人支持，後面自然會直接被pruning掉
 
     for allele in ALLELES:
-
-
-        # ----------------------------------------------------
-        # 11. 取得目前SNP中
-        # 支持這個allele的150人True/False vector
-        # ----------------------------------------------------
-
         allele_support = support_masks[
             snp_index
         ][
             allele
         ]
+  
+        #取交集 :current_support：支持目前prefix的人
+        #allele_support：支持目前這顆SNP allele的人
+        #& =必須「兩個條件都True」才能繼續支持新的haplotype
+        # 例如： prefix = A-C
+        # 現在加入G, 那new_support就代表：同時支持A-C-G的人
+
+        new_support = (current_support&allele_support)
+
+        #計算加入目前allele後還剩多少subjects支持
+        support_n = int(new_support.sum())
 
 
-        # ----------------------------------------------------
-        # 12. 取交集
-        # ----------------------------------------------------
-        #
-        # current_support：
-        # 支持目前prefix的人
-        #
-        # allele_support：
-        # 支持目前這顆SNP allele的人
-        #
-        #
-        # & 的意思就是：
-        #
-        # 必須「兩個條件都True」
-        #
-        # 才能繼續支持新的haplotype
-        #
-        # 例如：
-        #
-        # prefix = A-C
-        # 現在加入G
-        #
-        # 那new_support就代表：
-        # 同時支持A-C-G的人
-        # ----------------------------------------------------
-
-        new_support = (
-            current_support
-            &
-            allele_support
-        )
-
-
-        # ----------------------------------------------------
-        # 13. 計算加入目前allele後
-        # 還剩多少subjects支持
-        # ----------------------------------------------------
-
-        support_n = int(
-            new_support.sum()
-        )
-
-
-        # ----------------------------------------------------
-        # 14. Pruning核心
-        # ----------------------------------------------------
-        #
-        # 如果support_n < 2：
-        #
-        # 代表這條partial haplotype
-        # 已經沒有至少2個人共同支持。
-        #
-        # 即使後面再加更多SNP，
-        # supporter只可能更少，不可能增加。
-        #
-        # 所以可以直接停止這條branch。
-        # ----------------------------------------------------
-
+        # 如果support_n < 2：代表這條partial haplotype已經<2個人共同支持所以可以直接停止這條branch
         if support_n < min_support:
-
             continue
 
 
-        # ----------------------------------------------------
-        # 15. 如果還有至少2個subjects
-        # 就繼續往下一顆SNP搜尋
-        # ----------------------------------------------------
-        #
+        # 如果還有至少2個subjects就繼續往下一顆SNP搜尋
         # prefix + allele
-        #
         # 例如：
-        #
         # prefix = "AC"
         # allele = "G"
-        #
         # 新prefix = "ACG"
-        #
         # 並且把new_support一起保存，
         # 下一顆SNP只能從這些仍支持ACG的人繼續找。
-        # ----------------------------------------------------
-
-        stack.append(
-            (
-                snp_index + 1,
-                prefix + allele,
-                new_support
-            )
-        )
+        stack.append((snp_index + 1,prefix + allele,new_support))
 
 # ============================================================
 # Step 5：優先搜尋support人數最高的candidate haplotypes
@@ -620,41 +402,16 @@ while stack:
 # 不需要找完全部candidate haplotypes，
 # 先找最常見的完整haplotypes。
 # ============================================================
+import heapq  #priority queue:一個可以依指定的優先值，取出下一筆搜尋狀態的待辦清單
 
-
-#Python priority queue
-import heapq
-
-
-# ------------------------------------------------------------
 # 1. 設定我們想先找多少條最高頻完整haplotypes
-# ------------------------------------------------------------
-#
-#目前先找前100條
-#不是說只有100條，
-#只是先看最高frequency的結果
-# ------------------------------------------------------------
-
 top_n_haplotypes = 100
-
-
-# ------------------------------------------------------------
 # 2. 最低共同support仍然設定為2人
-# ------------------------------------------------------------
-
 min_support = 2
 
-
-# ------------------------------------------------------------
-# 3. 建立priority queue
-# ------------------------------------------------------------
+# heapq預設是「數字小的優先」->表示搜尋的順序而已
 #
-# heapq預設是「數字小的優先」
-#
-# 但我們希望：
-# support人數越多越優先
-#
-# 所以使用負號：
+# 但希望：support人數越多越優先 所以使用負號：
 #
 # 150人support
 # → priority = -150
@@ -669,11 +426,11 @@ min_support = 2
 # queue每一筆包含：
 #
 # (
-#   -support_n,
-#   unique_counter,
-#   snp_index,
-#   haplotype_prefix,
-#   supporter_mask
+#   -support_n,  決定主要優先順序
+#   unique_counter, 支持人數相同時，用編號決定先後
+#   snp_index, 下一顆要處理的 SNP 位置
+#   haplotype_prefix, 目前已建立的候選序列
+#   supporter_mask 支持這條序列的人員名單
 # )
 #
 # unique_counter只是避免兩筆priority相同時
@@ -707,53 +464,32 @@ heapq.heappush(
     )
 )
 
-
-# ------------------------------------------------------------
-# 4. 儲存最後找到的完整high-frequency haplotypes
-# ------------------------------------------------------------
-
 top_results = []
 
 
 #記錄總共搜尋多少nodes
 nodes_visited_best = 0
 
-# ============================================================
-# 5. 開始Best-first search
-# ============================================================
-
+#當還有等待處理的分支（priority_queue）以及找到的完整序列還不到 100 條（len(top_results) < top_n_haplotypes）時會繼續搜尋
 while priority_queue and len(top_results) < top_n_haplotypes:
-
-    # --------------------------------------------------------
-    # 取出目前support subjects最多的branch
-    # --------------------------------------------------------
-
+#以下任一情況都會結束搜尋:已經找到 100 條完整候選序列、所有分支都處理完了，沒有其他候選可搜尋
     (
         negative_support_n,
         _,
         snp_index,
         prefix,
         current_support
-    ) = heapq.heappop(
+    ) = heapq.heappop(   #會取出並移除優先值最小的一筆因為付的最小 表示目前支持的人最多
         priority_queue
     )
 
 
     #把負數轉回真正support人數
     current_support_n = -negative_support_n
-
-
     #記錄搜尋node數
     nodes_visited_best += 1
-
-
-    # --------------------------------------------------------
-    # 如果206顆SNP全部完成
-    # 代表找到一條完整candidate haplotype
-    # --------------------------------------------------------
-
+# 如果206顆SNP全部完成 代表找到一條完整candidate haplotype
     if snp_index == n_snps:
-
         top_results.append(
             {
                 #完整206-SNP haplotype
@@ -779,15 +515,10 @@ while priority_queue and len(top_results) < top_n_haplotypes:
         continue
 
 
-    # --------------------------------------------------------
-    # 尚未走完206顆SNP
-    # 嘗試目前SNP的A/C/G/T
-    # --------------------------------------------------------
-
+ # 尚未走完206顆SNP
+# 嘗試目前SNP的A/C/G/T
     for allele in ALLELES:
-
-        #目前這顆SNP中
-        #哪些subjects可以支持這個allele
+    #目前這顆SNP中 哪些subjects可以支持這個allele
         allele_support = support_masks[
             snp_index
         ][
@@ -795,11 +526,7 @@ while priority_queue and len(top_results) < top_n_haplotypes:
         ]
 
 
-        #必須同時支持：
-        #
-        #目前已經形成的prefix
-        #AND
-        #目前這顆SNP的allele
+        #必須同時支持：目前已經形成的prefix AND目前這顆SNP的allele
         new_support = (
             current_support
             &
@@ -6730,10 +6457,6 @@ print(
 #
 # 這裡固定使用「中央四格中的左上角」作為起點：
 # Python 0-based index = (359, 359)
-#
-# 若之後你想改成中央四格中的其他一格，
-# 只要改 start_row / start_col 即可。
-# ============================================================
 
 import math
 import numpy as np
